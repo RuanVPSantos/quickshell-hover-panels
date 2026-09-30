@@ -44,6 +44,10 @@ ShellRoot {
     property bool bluetoothPanelHovered: false
     property bool notificationsTriggerHovered: false
     property bool notificationsPanelHovered: false
+    property bool clockOpen: false
+    property bool clockTriggerHovered: false
+    property bool clockPanelHovered: false
+    property string clockScreenName: ""
     property var notifications: []
     property var liveNotifications: ({})
     property var toast: null
@@ -60,7 +64,7 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; previewTriggerKey = ""; trayMenuOpen = false; }
+    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; clockOpen = false; workspacePreviewOpen = false; previewTriggerKey = ""; trayMenuOpen = false; }
 
     function openTrayMenu(item, screenName, y) {
         trayMenuItem = item;
@@ -186,6 +190,15 @@ ShellRoot {
         onTriggered: {
             if (!shell.notificationsTriggerHovered && !shell.notificationsPanelHovered)
                 shell.notificationsOpen = false;
+        }
+    }
+
+    Timer {
+        id: clockCloseDelay
+        interval: 150
+        onTriggered: {
+            if (!shell.clockTriggerHovered && !shell.clockPanelHovered)
+                shell.clockOpen = false;
         }
     }
 
@@ -596,18 +609,43 @@ ShellRoot {
                 border.width: 1
             }
 
-            Text {
+            Rectangle {
+                id: clockButton
                 visible: shell.customLayout
                 anchors.top: parent.top
-                anchors.topMargin: 20
+                anchors.topMargin: 24
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Qt.formatDateTime(shell.now, "hh\nmm")
-                horizontalAlignment: Text.AlignHCenter
-                color: "#F4F4F6"
-                font.family: "Noto Sans"
-                font.pixelSize: 15
-                font.weight: Font.DemiBold
-                lineHeight: 1.1
+                width: 38
+                height: 50
+                radius: 13
+                color: clockMouse.containsMouse ? "#4039323E" : "transparent"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: Qt.formatDateTime(shell.now, "hh\nmm")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    lineHeight: 1.1
+                }
+
+                MouseArea {
+                    id: clockMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: {
+                        clockCloseDelay.stop();
+                        shell.clockScreenName = statusRail.modelData.name;
+                        shell.clockTriggerHovered = true;
+                        shell.clockOpen = true;
+                    }
+                    onExited: {
+                        shell.clockTriggerHovered = false;
+                        clockCloseDelay.restart();
+                    }
+                }
             }
 
             ListView {
@@ -822,6 +860,64 @@ ShellRoot {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: clockPopup
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+                     shell.clockOpen && shell.clockScreenName === modelData.name &&
+                     !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 256
+            implicitHeight: 78
+            anchors.left: true
+            anchors.top: true
+            margins.left: 46
+            margins.top: 22
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-clock"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.clockPanelHovered = false
+
+            HoverHandler {
+                onHoveredChanged: {
+                    shell.clockPanelHovered = hovered;
+                    if (hovered) clockCloseDelay.stop();
+                    else clockCloseDelay.restart();
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 4
+                radius: 20
+                color: Qt.rgba(0, 0, 0, 0.65)
+                border.color: "#4DFFFFFF"
+                border.width: 1
+
+                Text {
+                    x: 15; y: 11
+                    text: Qt.locale("pt_BR").toString(shell.now, "dddd")
+                    color: "#CFC4D0"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
+                }
+                Text {
+                    x: 15; y: 31
+                    text: Qt.locale("pt_BR").toString(shell.now, "d 'de' MMMM 'de' yyyy")
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
                 }
             }
         }
