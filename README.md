@@ -34,6 +34,8 @@ ruanops update quickshell_panels
 ruanops update quickshell_panels --apply
 ```
 
+In `ruanops lazy`, select **Atualizar painéis Quickshell** to see the plan and choose whether to apply the update.
+
 `--update` pulls the latest commit with `git pull --ff-only` and runs the installer again. The installer copies the QML files to `~/.config/quickshell`, adds missing autostart and Top Dashboard blur rules to the Hyprland user configuration, then reloads the two panels if Hyprland is running. Changed local files are backed up under `~/.local/state/quickshell-hover-panels/backups/`. Running it again does not duplicate rules.
 
 The installer does not modify Waybar or delete local assets.
