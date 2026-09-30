@@ -67,32 +67,55 @@ append_unique() {
   fi
 }
 
-install_panel top-dashboard
-install_panel edge-session
-left_status_enabled=false
-if [[ -f "$config_dir/quickshell/left-status/enabled" ]]; then
-  left_status_enabled=true
-  install_panel left-status
-  state_file="$state_dir/quickshell-hover-panels/left-status-visible"
-  mkdir -p -- "$(dirname -- "$state_file")"
-  if [[ ! -f "$state_file" ]]; then
-    printf 'visible\n' > "$state_file"
-  fi
-  keybind_file="$config_dir/hypr/configs/Keybinds.conf"
-  old_bind='bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, pkill -SIGUSR1 waybar'
-  new_bind='bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, $HOME/.config/quickshell/left-status/toggle-bar.sh'
-  if [[ -f "$keybind_file" ]] && grep -Fqx -- "$old_bind" "$keybind_file"; then
-    backup_file "$keybind_file" 'hypr/Keybinds.conf'
-    python3 - "$keybind_file" "$old_bind" "$new_bind" <<'PY'
+replace_line() {
+  local file="$1" old="$2" new="$3" backup_path="$4"
+  if [[ -f "$file" ]] && grep -Fqx -- "$old" "$file"; then
+    backup_file "$file" "$backup_path"
+    python3 - "$file" "$old" "$new" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
-path.write_text(path.read_text().replace(sys.argv[2], sys.argv[3], 1))
+lines = path.read_text().splitlines(keepends=True)
+path.write_text("".join(sys.argv[3] + line[len(sys.argv[2]):] if line.rstrip("\n") == sys.argv[2]
+                        else line for line in lines))
 PY
-    echo "Updated Waybar toggle to include Left Status"
+    echo "Updated $file"
   fi
+}
+
+install_panel top-dashboard
+install_panel edge-session
+install_panel left-status
+for asset in empty-left.jsonc empty-left.css; do
+  destination="$config_dir/waybar/$asset"
+  mkdir -p -- "$(dirname -- "$destination")"
+  if [[ ! -f "$destination" ]] || ! cmp -s -- "$repo_dir/waybar/$asset" "$destination"; then
+    backup_file "$destination" "waybar/$asset"
+    install -m 0644 -- "$repo_dir/waybar/$asset" "$destination"
+    echo "Installed $destination"
+  fi
+done
+
+state_file="$state_dir/quickshell-hover-panels/left-status-visible"
+mkdir -p -- "$(dirname -- "$state_file")"
+if [[ ! -f "$state_dir/quickshell-hover-panels/notifications.json" ]]; then
+  printf '[]\n' > "$state_dir/quickshell-hover-panels/notifications.json"
 fi
+if [[ ! -f "$state_dir/quickshell-hover-panels/dnd" ]]; then
+  printf 'off\n' > "$state_dir/quickshell-hover-panels/dnd"
+fi
+if [[ ! -f "$state_file" ]]; then
+  printf 'visible\n' > "$state_file"
+fi
+keybind_file="$config_dir/hypr/configs/Keybinds.conf"
+replace_line "$keybind_file" 'bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, pkill -SIGUSR1 waybar' 'bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, $HOME/.config/quickshell/left-status/toggle-bar.sh' 'hypr/Keybinds.conf'
+replace_line "$keybind_file" 'bindd = $mainMod ALT, B, waybar layout menu, exec, $scriptsDir/WaybarLayout.sh' 'bindd = $mainMod ALT, B, layout menu, exec, $HOME/.config/quickshell/left-status/layout.sh menu' 'hypr/Keybinds.conf'
+replace_line "$config_dir/hypr/configs/Startup_Apps.conf" 'exec-once = waybar' 'exec-once = $HOME/.config/quickshell/left-status/layout.sh sync' 'hypr/Startup_Apps.conf'
+replace_line "$config_dir/hypr/configs/Startup_Apps.conf" 'exec-once = swaync' '# SwayNC starts only with a Waybar layout' 'hypr/Startup_Apps.conf'
+replace_line "$config_dir/hypr/scripts/Refresh.sh" 'waybar &' 'if [[ ! -f "${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-hover-panels/layout" || "$(<"${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-hover-panels/layout")" != quickshell ]]; then waybar & fi' 'hypr/Refresh.sh'
+replace_line "$config_dir/hypr/scripts/Refresh.sh" 'swaync >/dev/null 2>&1 &' 'if [[ ! -f "${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-hover-panels/layout" || "$(<"${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-hover-panels/layout")" != quickshell ]]; then swaync >/dev/null 2>&1 & fi' 'hypr/Refresh.sh'
+replace_line "$config_dir/hypr/scripts/Refresh.sh" 'swaync-client --reload-config' 'if pgrep -x swaync >/dev/null 2>&1; then swaync-client --reload-config; fi' 'hypr/Refresh.sh'
 
 # The animation frames are user-supplied. Updating the code never removes them.
 hypr_dir="$config_dir/hypr"
@@ -107,22 +130,27 @@ if [[ -f "$hypr_dir/hyprland.conf" ]]; then
   fi
   append_unique "$startup_file" 'exec-once = qs -c edge-session -n -d'
   append_unique "$startup_file" 'exec-once = qs -c top-dashboard -n -d'
-  if "$left_status_enabled"; then
-    append_unique "$startup_file" 'exec-once = qs -c left-status -n -d'
-    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, blur on'
-    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, ignore_alpha 0.1'
-    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, no_anim on'
-  fi
+  append_unique "$startup_file" 'exec-once = qs -c left-status -n -d'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, blur on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, ignore_alpha 0.1'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, no_anim on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, blur on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, ignore_alpha 0.1'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, no_anim on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-bluetooth, blur on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-bluetooth, ignore_alpha 0.1'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-bluetooth, no_anim on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-notifications, blur on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-notifications, ignore_alpha 0.1'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-notifications, no_anim on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:top-dashboard, blur on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:top-dashboard, ignore_alpha 0.1'
 fi
 
 if command -v hyprctl >/dev/null 2>&1 && hyprctl -j monitors >/dev/null 2>&1; then
   hyprctl reload >/dev/null
-  panels=(edge-session top-dashboard)
-  if "$left_status_enabled"; then
-    panels+=(left-status)
-  fi
+  "$config_dir/quickshell/left-status/layout.sh" sync
+  panels=(edge-session top-dashboard left-status)
   for panel in "${panels[@]}"; do
     if qs kill -c "$panel" >/dev/null 2>&1; then
       # IPC acknowledges the request before the process finishes exiting.

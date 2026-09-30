@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import Quickshell.Services.Notifications
 import Quickshell.Wayland
 
 ShellRoot {
@@ -10,9 +11,27 @@ ShellRoot {
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")
     readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
+    readonly property bool customLayout: status.layout === "custom"
     readonly property var entries: ["notifications", "network", "bluetooth", "battery", "brightness", "microphone", "volume", "nightlight"]
     property var status: ({ enabled: false })
     property string current: ""
+    property bool wifiOpen: false
+    property bool bluetoothOpen: false
+    property bool notificationsOpen: false
+    property string wifiScreenName: ""
+    property string bluetoothScreenName: ""
+    property string notificationsScreenName: ""
+    property bool wifiTriggerHovered: false
+    property bool wifiPanelHovered: false
+    property bool bluetoothTriggerHovered: false
+    property bool bluetoothPanelHovered: false
+    property bool notificationsTriggerHovered: false
+    property bool notificationsPanelHovered: false
+    property var notifications: []
+    property var liveNotifications: ({})
+    property var toast: null
+    property bool historyLoaded: false
+    property date now: new Date()
     property real suppressStatusUntil: 0
     readonly property int activeIndex: Math.max(0, entries.indexOf(current))
 
@@ -23,7 +42,147 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) current = ""
+    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; }
+
+    FileView {
+        id: notificationHistory
+        path: shell.stateHome + "/quickshell-hover-panels/notifications.json"
+        onLoaded: {
+            if (shell.historyLoaded) return;
+            shell.historyLoaded = true;
+            try {
+                const saved = JSON.parse(text());
+                shell.notifications = Array.isArray(saved) ? saved : [];
+            }
+            catch (error) { shell.notifications = []; }
+        }
+    }
+
+    FileView {
+        id: dndState
+        path: shell.stateHome + "/quickshell-hover-panels/dnd"
+        watchChanges: true
+        onFileChanged: reload()
+    }
+
+    Loader {
+        active: shell.customLayout
+        sourceComponent: NotificationServer {
+            persistenceSupported: true
+            bodySupported: true
+            actionsSupported: true
+            onNotification: notification => {
+                notification.tracked = true;
+                shell.captureNotification(notification);
+            }
+        }
+    }
+
+    function captureNotification(notification) {
+        if (notification.transient) return;
+        const key = Date.now().toString() + "-" + notification.id;
+        const item = { key: key, app: notification.appName || "Notification",
+                       summary: notification.summary || "", body: notification.body || "" };
+        liveNotifications[key] = notification;
+        notifications = [item].concat(notifications).slice(0, 50);
+        notificationHistory.setText(JSON.stringify(notifications));
+        if (dndState.text().trim() !== "on") {
+            toast = item;
+            toastTimer.restart();
+        }
+    }
+
+    function dismissNotification(key) {
+        if (liveNotifications[key]) liveNotifications[key].dismiss();
+        delete liveNotifications[key];
+        notifications = notifications.filter(item => item.key !== key);
+        notificationHistory.setText(JSON.stringify(notifications));
+    }
+
+    function clearNotifications() {
+        Object.values(liveNotifications).forEach(notification => notification.dismiss());
+        liveNotifications = ({});
+        notifications = [];
+        toast = null;
+        notificationHistory.setText("[]");
+    }
+
+    function activateNotification(key) {
+        const notification = liveNotifications[key];
+        if (notification && notification.actions.length > 0)
+            notification.actions[0].invoke();
+    }
+
+    Timer {
+        id: toastTimer
+        interval: 5000
+        onTriggered: shell.toast = null
+    }
+
+    Timer {
+        id: wifiCloseDelay
+        interval: 100
+        onTriggered: {
+            if (!shell.wifiTriggerHovered && !shell.wifiPanelHovered)
+                shell.wifiOpen = false;
+        }
+    }
+
+    Timer {
+        id: bluetoothCloseDelay
+        interval: 100
+        onTriggered: {
+            if (!shell.bluetoothTriggerHovered && !shell.bluetoothPanelHovered)
+                shell.bluetoothOpen = false;
+        }
+    }
+
+    Timer {
+        id: notificationsCloseDelay
+        interval: 110
+        onTriggered: {
+            if (!shell.notificationsTriggerHovered && !shell.notificationsPanelHovered)
+                shell.notificationsOpen = false;
+        }
+    }
+
+    IpcHandler {
+        target: "leftStatus"
+        function refresh(): void {
+            if (!statusProcess.running) statusProcess.running = true;
+        }
+        function openWifi(): void {
+            shell.current = "";
+            shell.wifiScreenName = Hyprland.focusedMonitor?.name || Quickshell.screens[0]?.name || "";
+            shell.wifiOpen = true;
+        }
+        function openBluetooth(): void {
+            shell.current = "";
+            shell.bluetoothScreenName = Hyprland.focusedMonitor?.name || Quickshell.screens[0]?.name || "";
+            shell.bluetoothOpen = true;
+        }
+        function openNotifications(): void {
+            shell.current = "";
+            shell.notificationsScreenName = Hyprland.focusedMonitor?.name || Quickshell.screens[0]?.name || "";
+            shell.notificationsOpen = true;
+        }
+        function clearNotifications(): void {
+            shell.clearNotifications();
+        }
+        function debugState(): string {
+            return JSON.stringify({ enabled: shell.status.enabled, layout: shell.status.layout,
+                                    visible: shell.barVisible, current: shell.current,
+                                    wifiOpen: shell.wifiOpen, trigger: shell.wifiTriggerHovered,
+                                    panel: shell.wifiPanelHovered, screen: shell.wifiScreenName });
+        }
+    }
+
+    Timer {
+        interval: 10000
+        running: true
+        repeat: true
+        onTriggered: shell.now = new Date()
+    }
 
     function field(name) { return status[name] || {}; }
 
@@ -101,13 +260,19 @@ ShellRoot {
         return [];
     }
 
-    function runAction(action) {
+    function runAction(action, screen) {
+        if (action === "wifi-picker") {
+            current = "";
+            wifiScreenName = screen.name;
+            wifiOpen = true;
+            wifiCloseDelay.stop();
+            return;
+        }
         let command = [];
         switch (action) {
         case "notifications-open": command = ["swaync-client", "-t", "-sw"]; break;
         case "dnd": command = ["swaync-client", "-d", "-sw"]; break;
         case "network-settings": command = ["nm-connection-editor"]; break;
-        case "wifi-picker": command = ["python3", configHome + "/quickshell/left-status/wifi_picker.py"]; break;
         case "wifi": command = ["nmcli", "radio", "wifi", field("network").wifi_enabled ? "off" : "on"]; break;
         case "bluetooth-settings": command = ["blueman-manager"]; break;
         case "bluetooth-power": command = ["bluetoothctl", "power", field("bluetooth").powered ? "off" : "on"]; break;
@@ -189,7 +354,7 @@ ShellRoot {
                         return;
                     }
                     shell.status = JSON.parse(this.text);
-                    if (!shell.status.enabled) shell.current = "";
+                    if (!shell.status.enabled) { shell.current = ""; shell.wifiOpen = false; shell.bluetoothOpen = false; }
                 } catch (error) {
                     console.warn("Left status:", error);
                 }
@@ -211,6 +376,116 @@ ShellRoot {
         model: Quickshell.screens
 
         PanelWindow {
+            required property var modelData
+            screen: modelData
+            visible: shell.customLayout && shell.barVisible && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 46
+            implicitHeight: 72
+            anchors.left: true
+            anchors.top: true
+            margins.top: 8
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-clock"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 20
+                color: Qt.rgba(0, 0, 0, 0.55)
+                border.color: "#4DFFFFFF"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: Qt.formatDateTime(shell.now, "hh\nmm")
+                    horizontalAlignment: Text.AlignHCenter
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    lineHeight: 1.1
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: workspacePanel
+            required property var modelData
+            readonly property var monitor: Hyprland.monitorFor(modelData)
+            readonly property var workspaceIds: {
+                const ids = [1, 2, 3, 4, 5];
+                Hyprland.workspaces.values.forEach(workspace => {
+                    if (workspace.id > 5 && workspace.monitor?.name === monitor?.name)
+                        ids.push(workspace.id);
+                });
+                return ids.sort((a, b) => a - b);
+            }
+            screen: modelData
+            visible: shell.customLayout && shell.barVisible && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 46
+            implicitHeight: Math.min(328, Math.max(48, workspaceIds.length * 38 + 8))
+            anchors.left: true
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-workspaces"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 20
+                color: Qt.rgba(0, 0, 0, 0.55)
+                border.color: "#4DFFFFFF"
+                border.width: 1
+
+                ListView {
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    model: workspacePanel.workspaceIds
+                    clip: true
+                    spacing: 4
+                    delegate: Rectangle {
+                        id: workspaceButton
+                        required property int modelData
+                        readonly property bool active: modelData === workspacePanel.monitor?.activeWorkspace?.id
+                        width: 34
+                        height: 34
+                        radius: 10
+                        color: workspaceMouse.containsMouse ? "#4039323E" : "transparent"
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: workspaceButton.active ? 11 : 9
+                            height: width
+                            radius: width / 2
+                            color: workspaceButton.active ? "#e4d3e1" : "transparent"
+                            border.color: "#e4d3e1"
+                            border.width: workspaceButton.active ? 0 : 1.5
+                        }
+                        MouseArea {
+                            id: workspaceMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Hyprland.dispatch("workspace " + workspaceButton.modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: statusRail
             required property var modelData
             screen: modelData
             visible: shell.status.enabled && shell.barVisible && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
@@ -245,7 +520,10 @@ ShellRoot {
                         width: 38
                         height: 38
                         radius: 13
-                        color: shell.current === modelData ? "#514354" : iconMouse.containsMouse ? "#4039323E" : "transparent"
+                        color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
+                               (modelData === "bluetooth" && shell.bluetoothOpen) ||
+                               (modelData === "notifications" && shell.notificationsOpen) ? "#514354" :
+                               iconMouse.containsMouse ? "#4039323E" : "transparent"
 
                         Text {
                             anchors.centerIn: parent
@@ -262,12 +540,65 @@ ShellRoot {
                             cursorShape: Qt.PointingHandCursor
                             onEntered: {
                                 closeDelay.stop();
-                                shell.current = statusIcon.modelData;
+                                if (statusIcon.modelData === "network") {
+                                    wifiCloseDelay.stop();
+                                    shell.wifiTriggerHovered = true;
+                                    shell.wifiScreenName = statusRail.modelData.name;
+                                    shell.current = "";
+                                    shell.bluetoothOpen = false;
+                                    shell.notificationsOpen = false;
+                                    shell.wifiOpen = true;
+                                } else if (statusIcon.modelData === "bluetooth") {
+                                    bluetoothCloseDelay.stop();
+                                    shell.bluetoothTriggerHovered = true;
+                                    shell.bluetoothScreenName = statusRail.modelData.name;
+                                    shell.current = "";
+                                    shell.wifiOpen = false;
+                                    shell.notificationsOpen = false;
+                                    shell.bluetoothOpen = true;
+                                } else if (statusIcon.modelData === "notifications") {
+                                    shell.wifiOpen = false;
+                                    shell.bluetoothOpen = false;
+                                    shell.current = "";
+                                    if (shell.customLayout) {
+                                        notificationsCloseDelay.stop();
+                                        shell.notificationsTriggerHovered = true;
+                                        shell.notificationsScreenName = statusRail.modelData.name;
+                                        shell.notificationsOpen = true;
+                                    } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                } else {
+                                    shell.wifiOpen = false;
+                                    shell.bluetoothOpen = false;
+                                    shell.notificationsOpen = false;
+                                    shell.current = statusIcon.modelData;
+                                }
                             }
-                            onExited: shell.closeSoon()
+                            onExited: {
+                                if (statusIcon.modelData === "network") {
+                                    shell.wifiTriggerHovered = false;
+                                    wifiCloseDelay.restart();
+                                } else if (statusIcon.modelData === "bluetooth") {
+                                    shell.bluetoothTriggerHovered = false;
+                                    bluetoothCloseDelay.restart();
+                                } else if (statusIcon.modelData === "notifications") {
+                                    shell.notificationsTriggerHovered = false;
+                                    notificationsCloseDelay.restart();
+                                } else shell.closeSoon();
+                            }
                             onClicked: {
                                 closeDelay.stop();
-                                shell.current = statusIcon.modelData;
+                                if (statusIcon.modelData === "network") {
+                                    shell.wifiScreenName = statusRail.modelData.name;
+                                    shell.wifiOpen = true;
+                                } else if (statusIcon.modelData === "bluetooth") {
+                                    shell.bluetoothScreenName = statusRail.modelData.name;
+                                    shell.bluetoothOpen = true;
+                                } else if (statusIcon.modelData === "notifications") {
+                                    if (shell.customLayout) {
+                                        shell.notificationsScreenName = statusRail.modelData.name;
+                                        shell.notificationsOpen = true;
+                                    } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                } else shell.current = statusIcon.modelData;
                             }
                         }
                     }
@@ -280,6 +611,7 @@ ShellRoot {
         model: Quickshell.screens
 
         PanelWindow {
+            id: statusPopup
             required property var modelData
             screen: modelData
             visible: shell.status.enabled && shell.barVisible && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
@@ -388,10 +720,199 @@ ShellRoot {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: shell.runAction(actionButton.modelData.id)
+                                onClicked: shell.runAction(actionButton.modelData.id, statusPopup.modelData)
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: wifiPanel
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.barVisible && shell.wifiOpen && shell.wifiScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 368
+            implicitHeight: 400
+            anchors.left: true
+            anchors.bottom: true
+            margins.left: 46
+            margins.bottom: 8
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-wifi"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+            onVisibleChanged: {
+                if (visible) wifiPicker.open();
+                else shell.wifiPanelHovered = false;
+            }
+
+            WifiPicker {
+                id: wifiPicker
+                anchors.fill: parent
+                anchors.margins: 4
+                helperPath: shell.configHome + "/quickshell/left-status/wifi_picker.py"
+                wifiEnabled: shell.field("network").wifi_enabled ?? false
+                onDismissed: shell.wifiOpen = false
+                onConnected: quickRefresh.restart()
+                onHoverChanged: hovered => {
+                    shell.wifiPanelHovered = hovered;
+                    if (hovered) wifiCloseDelay.stop();
+                    else wifiCloseDelay.restart();
+                }
+                onSettingsRequested: {
+                    shell.wifiOpen = false;
+                    shell.runAction("network-settings", wifiPanel.modelData);
+                }
+                onToggleWifiRequested: {
+                    shell.wifiOpen = false;
+                    shell.runAction("wifi", wifiPanel.modelData);
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: bluetoothPanel
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.barVisible && shell.bluetoothOpen && shell.bluetoothScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 368
+            implicitHeight: 400
+            anchors.left: true
+            anchors.bottom: true
+            margins.left: 46
+            margins.bottom: 8
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-bluetooth"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.bluetoothPanelHovered = false
+
+            BluetoothPicker {
+                anchors.fill: parent
+                anchors.margins: 4
+                onHoverChanged: hovered => {
+                    shell.bluetoothPanelHovered = hovered;
+                    if (hovered) bluetoothCloseDelay.stop();
+                    else bluetoothCloseDelay.restart();
+                }
+                onSettingsRequested: {
+                    shell.bluetoothOpen = false;
+                    shell.runAction("bluetooth-settings", bluetoothPanel.modelData);
+                }
+                onPowerChanged: quickRefresh.restart()
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: notificationsWindow
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.barVisible && shell.notificationsOpen && shell.notificationsScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 368
+            implicitHeight: 400
+            anchors.left: true
+            anchors.bottom: true
+            margins.left: 46
+            margins.bottom: 8
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-notifications"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.notificationsPanelHovered = false
+
+            NotificationPanel {
+                anchors.fill: parent
+                anchors.margins: 4
+                items: shell.notifications
+                dnd: dndState.text().trim() === "on"
+                onClearRequested: shell.clearNotifications()
+                onDismissRequested: key => shell.dismissNotification(key)
+                onActionRequested: key => shell.activateNotification(key)
+                onDndRequested: {
+                    const enabled = dndState.text().trim() !== "on";
+                    dndState.setText(enabled ? "on\n" : "off\n");
+                    shell.status = Object.assign({}, shell.status, { dnd: enabled });
+                }
+                onHoverChanged: hovered => {
+                    shell.notificationsPanelHovered = hovered;
+                    if (hovered) notificationsCloseDelay.stop();
+                    else notificationsCloseDelay.restart();
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            required property var modelData
+            screen: modelData
+            visible: shell.customLayout && shell.toast !== null &&
+                     modelData.name === (Hyprland.focusedMonitor?.name || Quickshell.screens[0]?.name) &&
+                     !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 322
+            implicitHeight: 86
+            anchors.right: true
+            anchors.top: true
+            margins.right: 12
+            margins.top: 12
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:notification-toast"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 18
+                color: Qt.rgba(0, 0, 0, 0.67)
+                border.color: "#4DFFFFFF"
+                border.width: 1
+                Text {
+                    x: 15; y: 10
+                    width: parent.width - 30
+                    text: shell.toast?.app || "Notification"
+                    color: "#b7a8b9"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                }
+                Text {
+                    x: 15; y: 29
+                    width: parent.width - 30
+                    text: shell.toast?.summary || ""
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+                Text {
+                    x: 15; y: 52
+                    width: parent.width - 30
+                    text: shell.toast?.body || ""
+                    color: "#c7b8c8"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
                 }
             }
         }

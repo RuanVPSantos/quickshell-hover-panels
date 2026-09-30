@@ -10,4 +10,5 @@ else
   printf 'hidden\n' > "$state_file"
 fi
 
+layout_file="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-hover-panels/layout"
 pkill -SIGUSR1 -x waybar || true

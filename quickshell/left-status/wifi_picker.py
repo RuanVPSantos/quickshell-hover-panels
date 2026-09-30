@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Choose a nearby Wi-Fi network with Rofi and connect through NetworkManager."""
+"""NetworkManager operations for the Quickshell Wi-Fi picker."""
 
+import json
 import subprocess
 import sys
 
 
-def run(*command, input_text=None, timeout=20):
+def run(*command, timeout=20):
     return subprocess.run(
-        command, input=input_text, capture_output=True, text=True, timeout=timeout,
+        command, capture_output=True, text=True, timeout=timeout,
     )
 
 
@@ -34,7 +35,7 @@ def networks(rescan=False):
     result = run("nmcli", "-t", "-e", "yes", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
                  "device", "wifi", "list", "--rescan", "yes" if rescan else "no")
     if result.returncode:
-        return []
+        raise RuntimeError(result.stderr.strip() or "Could not read Wi-Fi networks")
     found = {}
     for line in result.stdout.splitlines():
         fields = split_nmcli(line)
@@ -45,59 +46,41 @@ def networks(rescan=False):
             strength = int(signal)
         except ValueError:
             strength = 0
-        if ssid not in found or strength > found[ssid][1]:
-            found[ssid] = (active == "*", strength, security)
-    return sorted(((ssid, *details) for ssid, details in found.items()),
-                  key=lambda item: (not item[1], -item[2], item[0].casefold()))
+        if ssid not in found or strength > found[ssid]["signal"]:
+            found[ssid] = {"ssid": ssid, "active": active == "*", "signal": strength,
+                           "secured": security != "--"}
+    return sorted(found.values(), key=lambda item: (not item["active"],
+                                                     -item["signal"], item["ssid"].casefold()))
 
 
-def dialog(message, kind="error"):
-    run("zenity", f"--{kind}", "--title=Wi-Fi", f"--text={message}", timeout=120)
+def connect():
+    request = json.loads(sys.stdin.readline())
+    ssid = request["ssid"]
+    password = request.get("password", "")
+    command = ["nmcli", "-w", "15" if password else "5", "device", "wifi", "connect", ssid]
+    if password:
+        command.extend(("password", password))
+    result = run(*command, timeout=20 if password else 8)
+    return {"ok": result.returncode == 0,
+            "error": (result.stderr or result.stdout).strip() if result.returncode else ""}
 
 
 def main():
-    choices = networks()
-    while True:
-        labels = [f"{'●' if active else '○'}  {ssid}   {signal}%{'  ·  Secured' if security != '--' else ''}"
-                  for ssid, active, signal, security in choices]
-        labels.append("⟳  Rescan networks")
-        selected = run("rofi", "-dmenu", "-i", "-p", "Wi-Fi", "-format", "i",
-                       input_text="\n".join(labels) + "\n", timeout=120)
-        if selected.returncode or not selected.stdout.strip().isdigit():
-            return 0
-        index = int(selected.stdout.strip())
-        if index == len(choices):
-            choices = networks(rescan=True)
-            continue
-        if index >= len(choices):
-            return 1
-        break
-    ssid, active, _, security = choices[index]
-    if active:
-        return 0
-
-    connected = run("nmcli", "-w", "5", "device", "wifi", "connect", ssid, timeout=7)
-    if connected.returncode == 0:
-        return 0
-    if security == "--":
-        dialog(f"Could not connect to {ssid}.\n{connected.stderr.strip()}")
+    try:
+        if sys.argv[1:] == ["--list"]:
+            output = {"networks": networks()}
+        elif sys.argv[1:] == ["--list", "--rescan"]:
+            output = {"networks": networks(rescan=True)}
+        elif sys.argv[1:] == ["--connect"]:
+            output = connect()
+        else:
+            output = {"error": "Usage: wifi_picker.py --list [--rescan] | --connect"}
+        print(json.dumps(output, ensure_ascii=False))
+        return 0 if "error" not in output else 1
+    except (OSError, subprocess.TimeoutExpired, RuntimeError, ValueError, KeyError) as error:
+        print(json.dumps({"error": str(error)}))
         return 1
-
-    password = run("zenity", "--password", "--title=Wi-Fi password",
-                   f"--text=Password for {ssid}", timeout=120)
-    if password.returncode:
-        return 0
-    connected = run("nmcli", "-w", "15", "device", "wifi", "connect", ssid,
-                    "password", password.stdout.rstrip("\n"), timeout=20)
-    if connected.returncode:
-        dialog(f"Could not connect to {ssid}.\n{connected.stderr.strip()}")
-        return 1
-    return 0
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except (OSError, subprocess.TimeoutExpired) as error:
-        print(f"Wi-Fi picker: {error}", file=sys.stderr)
-        sys.exit(1)
+    sys.exit(main())

@@ -1,12 +1,12 @@
 # Quickshell Hover Panels
 
-Two independent panels for Hyprland and Quickshell:
+Three Quickshell panels for Hyprland:
 
 - **Top Dashboard:** opens when the pointer reaches the top center. It has Dashboard, Media and Performance tabs.
 - **Edge Session:** opens from the middle of the right edge with lock, suspend, logout, reboot and power controls.
-- **Left Status:** an optional status area for the `[LEFT] WestWing` Waybar layout. Hover the bottom icons for network, Bluetooth, battery, brightness, microphone, volume, notifications and night light controls.
+- **Left Status:** clock, workspace dots, and status icons. The active workspace has a filled dot. Hover the bottom icons for Wi-Fi, paired Bluetooth devices, battery, brightness, microphone, volume, notifications and night light controls.
 
-The panels use translucent backgrounds and can run alongside any Waybar layout. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
+The panels use translucent backgrounds. The custom layout runs an invisible 46 px Waybar on the left to reserve space for the Quickshell rail; it does not draw any icons. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
 Click the media card in Dashboard, or the cover and track details in Media, to focus the player window. Playback buttons retain their own actions. The panel asks the MPRIS player to raise itself and uses Hyprland's window list when the player does not do so. If several windows of the same app are open and the playing one cannot be identified, it leaves the current window focused.
 
@@ -39,9 +39,13 @@ ruanops update quickshell_panels --apply
 
 In `ruanops lazy`, select **Atualizar painéis Quickshell** to see the plan and choose whether to apply the update.
 
-`--update` pulls the latest commit with `git pull --ff-only` and runs the installer again. The installer copies the QML files to `~/.config/quickshell`, adds missing autostart and Top Dashboard blur rules to the Hyprland user configuration, then reloads the two panels if Hyprland is running. Changed local files are backed up under `~/.local/state/quickshell-hover-panels/backups/`. Running it again does not duplicate rules.
+`--update` pulls the latest commit with `git pull --ff-only` and runs the installer again. The installer copies the QML files to `~/.config/quickshell`, installs the empty Waybar configuration, updates Hyprland startup and blur rules, and reloads the panels if Hyprland is running. Changed local files are backed up under `~/.local/state/quickshell-hover-panels/backups/`. Running it again does not duplicate rules.
 
-The installer does not modify Waybar or delete local assets.
+Select **Quickshell · Three sides** with `Super+Alt+B`, or run `~/.config/quickshell/left-status/layout.sh activate`. Other layouts remain available from the same menu. `Super+Ctrl+Alt+B` hides or shows the left rail and its reserved space together.
+
+Hovering the Wi-Fi icon opens a network list immediately from NetworkManager's cache and refreshes it automatically. Hovering Bluetooth shows paired devices with connect/disconnect actions. Hovering notifications opens a Quickshell panel showing recent notifications, individual dismiss controls, Clear, and Do Not Disturb. The other icons show their controls in a compact popout.
+
+In the Quickshell layout, Quickshell receives notifications directly and stores up to 50 recent entries in `~/.local/state/quickshell-hover-panels/notifications.json`. It shows a short toast when Do Not Disturb is off. The first launch starts a new history; SwayNC's earlier history cannot be imported. Switching to an older Waybar layout returns notification handling to SwayNC and restores its original configuration.
 
 ### Optional WestWing status hover
 
@@ -53,11 +57,11 @@ With the `[LEFT] WestWing` Waybar layout selected, run:
 
 This saves a backup under `~/.local/state/quickshell-hover-panels/`, removes only WestWing's `modules-right` icons, and starts the matching Quickshell status strip and popouts. Clock and workspaces stay in Waybar. The status strip hides while another Waybar layout is selected, so it will not duplicate that layout's icons. Running the command again is safe. Later `./install.sh --update` or `ruanops lazy` updates all enabled panels, including Left Status.
 
-The network popout has **Other Wi-Fi**, which opens Rofi immediately with NetworkManager's cached list. Select **Rescan networks** there to refresh nearby networks on demand; a password is requested with Zenity when needed. The battery popout offers the installed TuneD profiles (Saver, Balanced and Desktop). Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
+The battery popout offers the installed TuneD profiles (Saver, Balanced and Desktop). Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
 
 The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
 
-The popouts use the local `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `swaync-client`, `tuned-adm`, Rofi, Zenity and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it. To revert manually, restore the saved WestWing backup, remove `~/.config/quickshell/left-status/enabled`, and restart Waybar and the Quickshell panel.
+The popouts use the local `nmcli`, BlueZ, `brightnessctl`, `wpctl`, `tuned-adm` and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it.
 
 ## Optional animation
 

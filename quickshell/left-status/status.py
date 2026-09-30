@@ -90,11 +90,13 @@ def power_profile():
 
 
 def main():
+    layout_state = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "quickshell-hover-panels/layout"
+    custom = read(layout_state) == "quickshell"
     selected = (CONFIG / "waybar/config").resolve()
     westwing = (CONFIG / "waybar/configs/[LEFT] WestWing").resolve()
-    enabled = (CONFIG / "quickshell/left-status/enabled").exists() and selected == westwing
+    enabled = custom or ((CONFIG / "quickshell/left-status/enabled").exists() and selected == westwing)
     if not enabled:
-        print(json.dumps({"enabled": False}))
+        print(json.dumps({"enabled": False, "layout": "off"}))
         return
 
     try:
@@ -104,6 +106,7 @@ def main():
 
     data = {
         "enabled": True,
+        "layout": "custom" if custom else "legacy",
         "battery": battery(),
         "power_profile": power_profile(),
         "network": network(),
@@ -112,7 +115,8 @@ def main():
         "input": audio("@DEFAULT_AUDIO_SOURCE@"),
         "brightness": brightness(),
         "nightlight": nightlight.get("class") == "on",
-        "dnd": run("swaync-client", "-D", "-sw").lower() == "true",
+        "dnd": (read(layout_state.parent / "dnd") == "on") if custom
+               else run("swaync-client", "-D", "-sw").lower() == "true",
     }
     print(json.dumps(data))
 
