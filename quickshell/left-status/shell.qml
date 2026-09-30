@@ -1,8 +1,10 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Services.Notifications
+import Quickshell.Services.SystemTray
 import Quickshell.Wayland
 
 ShellRoot {
@@ -18,6 +20,12 @@ ShellRoot {
     property bool wifiOpen: false
     property bool bluetoothOpen: false
     property bool notificationsOpen: false
+    property bool workspacePreviewOpen: false
+    property int previewWorkspaceId: 0
+    property string previewScreenName: ""
+    property bool previewTriggerHovered: false
+    property bool previewPanelHovered: false
+    property var workspacePreviewData: ({ windows: {}, images: {} })
     property string wifiScreenName: ""
     property string bluetoothScreenName: ""
     property string notificationsScreenName: ""
@@ -31,6 +39,7 @@ ShellRoot {
     property var liveNotifications: ({})
     property var toast: null
     property bool historyLoaded: false
+    property var pendingLevels: ({})
     property date now: new Date()
     property real suppressStatusUntil: 0
     readonly property int activeIndex: Math.max(0, entries.indexOf(current))
@@ -42,7 +51,7 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; }
+    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; }
 
     FileView {
         id: notificationHistory
@@ -146,6 +155,54 @@ ShellRoot {
         }
     }
 
+    Timer {
+        id: workspacePreviewCloseDelay
+        interval: 100
+        onTriggered: {
+            if (!shell.previewTriggerHovered && !shell.previewPanelHovered)
+                shell.workspacePreviewOpen = false;
+        }
+    }
+
+    function previewKey() { return previewScreenName + ":" + previewWorkspaceId; }
+    function previewWindows() { return workspacePreviewData.windows[previewKey()] || []; }
+    function previewImage() { return workspacePreviewData.images[previewKey()] || ""; }
+
+    Process {
+        id: workspaceCaptureProcess
+        command: ["python3", shell.configHome + "/quickshell/left-status/workspace_preview.py", "capture"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { shell.workspacePreviewData = JSON.parse(this.text); }
+                catch (error) { console.warn("Workspace capture:", error); }
+            }
+        }
+    }
+
+    Process {
+        id: workspaceHoverProcess
+        command: ["python3", shell.configHome + "/quickshell/left-status/workspace_preview.py",
+                  "capture", shell.previewScreenName, shell.previewWorkspaceId.toString()]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { shell.workspacePreviewData = JSON.parse(this.text); }
+                catch (error) { console.warn("Workspace hover capture:", error); }
+            }
+        }
+    }
+
+    Timer {
+        interval: 12000
+        running: shell.customLayout && shell.barVisible
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!shell.workspacePreviewOpen && !workspaceCaptureProcess.running &&
+                !(Hyprland.focusedMonitor?.activeWorkspace?.hasFullscreen ?? false))
+                workspaceCaptureProcess.running = true;
+        }
+    }
+
     IpcHandler {
         target: "leftStatus"
         function refresh(): void {
@@ -244,6 +301,43 @@ ShellRoot {
         if (name === "volume") return field("output").percent || 0;
         if (name === "network" && field(name).type === "wifi") return field(name).signal || 0;
         return -1;
+    }
+
+    function stageLevel(name, requested) {
+        if (name !== "brightness" && name !== "volume" && name !== "microphone") return;
+        const value = Math.round(Math.max(name === "brightness" ? 5 : 0, Math.min(100, requested)));
+        const next = Object.assign({}, status);
+        if (name === "brightness") next.brightness = value;
+        else {
+            const key = name === "volume" ? "output" : "input";
+            next[key] = Object.assign({}, field(key), { percent: value, muted: false });
+        }
+        status = next;
+        pendingLevels[name] = value;
+        suppressStatusUntil = Date.now() + 850;
+        levelDebounce.restart();
+    }
+
+    function flushLevels() {
+        levelDebounce.stop();
+        const pending = pendingLevels;
+        pendingLevels = ({});
+        for (const name of Object.keys(pending)) {
+            const value = pending[name];
+            if (name === "brightness") Quickshell.execDetached(["brightnessctl", "set", value + "%"]);
+            else {
+                const target = name === "volume" ? "@DEFAULT_AUDIO_SINK@" : "@DEFAULT_AUDIO_SOURCE@";
+                Quickshell.execDetached(["wpctl", "set-volume", target, (value / 100).toFixed(2)]);
+                Quickshell.execDetached(["wpctl", "set-mute", target, "0"]);
+            }
+        }
+        if (Object.keys(pending).length) quickRefresh.restart();
+    }
+
+    Timer {
+        id: levelDebounce
+        interval: 70
+        onTriggered: shell.flushLevels()
     }
 
     function actionsFor(name) {
@@ -376,46 +470,7 @@ ShellRoot {
         model: Quickshell.screens
 
         PanelWindow {
-            required property var modelData
-            screen: modelData
-            visible: shell.customLayout && shell.barVisible && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
-            implicitWidth: 46
-            implicitHeight: 72
-            anchors.left: true
-            anchors.top: true
-            margins.top: 8
-            color: "transparent"
-            exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.namespace: "quickshell:left-clock"
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 20
-                color: Qt.rgba(0, 0, 0, 0.55)
-                border.color: "#4DFFFFFF"
-                border.width: 1
-
-                Text {
-                    anchors.centerIn: parent
-                    text: Qt.formatDateTime(shell.now, "hh\nmm")
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "#F4F4F6"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                    lineHeight: 1.1
-                }
-            }
-        }
-    }
-
-    Variants {
-        model: Quickshell.screens
-
-        PanelWindow {
-            id: workspacePanel
+            id: statusRail
             required property var modelData
             readonly property var monitor: Hyprland.monitorFor(modelData)
             readonly property var workspaceIds: {
@@ -426,54 +481,252 @@ ShellRoot {
                 });
                 return ids.sort((a, b) => a - b);
             }
+            readonly property var trayItems: SystemTray.items.values.filter(item => {
+                const name = (item.id + " " + item.title).toLowerCase();
+                return !name.includes("blueman") && !name.includes("networkmanager") &&
+                       !name.includes("nm_applet") && !name.includes("nm-applet");
+            })
             screen: modelData
-            visible: shell.customLayout && shell.barVisible && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.barVisible && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 46
-            implicitHeight: Math.min(328, Math.max(48, workspaceIds.length * 38 + 8))
+            implicitHeight: shell.customLayout ? modelData.height : 336
             anchors.left: true
+            anchors.top: shell.customLayout
+            anchors.bottom: !shell.customLayout
+            margins.bottom: shell.customLayout ? 0 : 8
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.namespace: "quickshell:left-workspaces"
+            WlrLayershell.namespace: "quickshell:left-status-icons"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Rectangle {
                 anchors.fill: parent
+                anchors.topMargin: shell.customLayout ? 8 : 0
+                anchors.bottomMargin: shell.customLayout ? 8 : 0
                 radius: 20
                 color: Qt.rgba(0, 0, 0, 0.55)
                 border.color: "#4DFFFFFF"
                 border.width: 1
+            }
+
+            Text {
+                visible: shell.customLayout
+                anchors.top: parent.top
+                anchors.topMargin: 20
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: Qt.formatDateTime(shell.now, "hh\nmm")
+                horizontalAlignment: Text.AlignHCenter
+                color: "#F4F4F6"
+                font.family: "Noto Sans"
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                lineHeight: 1.1
+            }
+
+            ListView {
+                visible: shell.customLayout
+                anchors.centerIn: parent
+                width: 34
+                height: Math.min(328, Math.max(48, statusRail.workspaceIds.length * 38 + 8))
+                model: statusRail.workspaceIds
+                clip: true
+                spacing: 4
+                delegate: Rectangle {
+                    id: workspaceButton
+                    required property int modelData
+                    readonly property bool active: modelData === statusRail.monitor?.activeWorkspace?.id
+                    width: 34
+                    height: 34
+                    radius: 10
+                    color: workspaceMouse.containsMouse ? "#4039323E" : "transparent"
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: workspaceButton.active ? 11 : 9
+                        height: width
+                        radius: width / 2
+                        color: workspaceButton.active ? "#e4d3e1" : "transparent"
+                        border.color: "#e4d3e1"
+                        border.width: workspaceButton.active ? 0 : 1.5
+                    }
+                    MouseArea {
+                        id: workspaceMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered: {
+                            workspacePreviewCloseDelay.stop();
+                            shell.previewWorkspaceId = workspaceButton.modelData;
+                            shell.previewScreenName = statusRail.modelData.name;
+                            shell.previewTriggerHovered = true;
+                            shell.workspacePreviewOpen = true;
+                            shell.current = "";
+                            shell.wifiOpen = false;
+                            shell.bluetoothOpen = false;
+                            shell.notificationsOpen = false;
+                            if (!workspaceHoverProcess.running) workspaceHoverProcess.running = true;
+                        }
+                        onExited: {
+                            shell.previewTriggerHovered = false;
+                            workspacePreviewCloseDelay.restart();
+                        }
+                        onClicked: {
+                            shell.workspacePreviewOpen = false;
+                            Hyprland.dispatch("workspace " + workspaceButton.modelData);
+                        }
+                    }
+                }
+            }
+
+            Column {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: shell.customLayout ? 12 : 2
+                spacing: 10
 
                 ListView {
-                    anchors.fill: parent
-                    anchors.margins: 6
-                    model: workspacePanel.workspaceIds
+                    id: trayList
+                    visible: shell.customLayout && statusRail.trayItems.length > 0
+                    width: 38
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    height: visible ? Math.min(statusRail.trayItems.length * 42, Math.max(42, statusRail.height / 2 - 350)) : 0
                     clip: true
                     spacing: 4
+                    model: statusRail.trayItems
                     delegate: Rectangle {
-                        id: workspaceButton
-                        required property int modelData
-                        readonly property bool active: modelData === workspacePanel.monitor?.activeWorkspace?.id
-                        width: 34
-                        height: 34
-                        radius: 10
-                        color: workspaceMouse.containsMouse ? "#4039323E" : "transparent"
-
-                        Rectangle {
+                        id: trayButton
+                        required property var modelData
+                        width: 38
+                        height: 38
+                        radius: 13
+                        color: trayMouse.containsMouse ? "#4039323E" : "transparent"
+                        Image {
+                            id: trayImage
                             anchors.centerIn: parent
-                            width: workspaceButton.active ? 11 : 9
-                            height: width
-                            radius: width / 2
-                            color: workspaceButton.active ? "#e4d3e1" : "transparent"
-                            border.color: "#e4d3e1"
-                            border.width: workspaceButton.active ? 0 : 1.5
+                            width: 21
+                            height: 21
+                            source: trayButton.modelData.icon
+                            sourceSize.width: 21
+                            sourceSize.height: 21
+                            fillMode: Image.PreserveAspectFit
+                            visible: status === Image.Ready
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            visible: trayImage.status !== Image.Ready
+                            text: "󰀻"
+                            color: "#F4F4F6"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 17
                         }
                         MouseArea {
-                            id: workspaceMouse
+                            id: trayMouse
                             anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: Hyprland.dispatch("workspace " + workspaceButton.modelData)
+                            onClicked: mouse => {
+                                const item = trayButton.modelData;
+                                if (mouse.button === Qt.RightButton || item.onlyMenu)
+                                    item.secondaryActivate();
+                                else if (mouse.button === Qt.MiddleButton) item.secondaryActivate();
+                                else item.activate();
+                            }
+                            onWheel: wheel => trayButton.modelData.scroll(wheel.angleDelta.y, false)
+                        }
+                    }
+                }
+
+                Column {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 4
+                    Repeater {
+                        model: shell.entries
+                        delegate: Rectangle {
+                            id: statusIcon
+                            required property string modelData
+                            width: 38
+                            height: 38
+                            radius: 13
+                            color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
+                                   (modelData === "bluetooth" && shell.bluetoothOpen) ||
+                                   (modelData === "notifications" && shell.notificationsOpen) ? "#514354" :
+                                   iconMouse.containsMouse ? "#4039323E" : "transparent"
+                            Text {
+                                anchors.centerIn: parent
+                                text: shell.iconFor(statusIcon.modelData)
+                                color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 17
+                            }
+                            MouseArea {
+                                id: iconMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onEntered: {
+                                    closeDelay.stop();
+                                    if (statusIcon.modelData === "network") {
+                                        wifiCloseDelay.stop();
+                                        shell.wifiTriggerHovered = true;
+                                        shell.wifiScreenName = statusRail.modelData.name;
+                                        shell.current = "";
+                                        shell.bluetoothOpen = false;
+                                        shell.notificationsOpen = false;
+                                        shell.wifiOpen = true;
+                                    } else if (statusIcon.modelData === "bluetooth") {
+                                        bluetoothCloseDelay.stop();
+                                        shell.bluetoothTriggerHovered = true;
+                                        shell.bluetoothScreenName = statusRail.modelData.name;
+                                        shell.current = "";
+                                        shell.wifiOpen = false;
+                                        shell.notificationsOpen = false;
+                                        shell.bluetoothOpen = true;
+                                    } else if (statusIcon.modelData === "notifications") {
+                                        shell.wifiOpen = false;
+                                        shell.bluetoothOpen = false;
+                                        shell.current = "";
+                                        if (shell.customLayout) {
+                                            notificationsCloseDelay.stop();
+                                            shell.notificationsTriggerHovered = true;
+                                            shell.notificationsScreenName = statusRail.modelData.name;
+                                            shell.notificationsOpen = true;
+                                        } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                    } else {
+                                        shell.wifiOpen = false;
+                                        shell.bluetoothOpen = false;
+                                        shell.notificationsOpen = false;
+                                        shell.current = statusIcon.modelData;
+                                    }
+                                }
+                                onExited: {
+                                    if (statusIcon.modelData === "network") {
+                                        shell.wifiTriggerHovered = false;
+                                        wifiCloseDelay.restart();
+                                    } else if (statusIcon.modelData === "bluetooth") {
+                                        shell.bluetoothTriggerHovered = false;
+                                        bluetoothCloseDelay.restart();
+                                    } else if (statusIcon.modelData === "notifications") {
+                                        shell.notificationsTriggerHovered = false;
+                                        notificationsCloseDelay.restart();
+                                    } else shell.closeSoon();
+                                }
+                                onClicked: {
+                                    closeDelay.stop();
+                                    if (statusIcon.modelData === "network") {
+                                        shell.wifiScreenName = statusRail.modelData.name;
+                                        shell.wifiOpen = true;
+                                    } else if (statusIcon.modelData === "bluetooth") {
+                                        shell.bluetoothScreenName = statusRail.modelData.name;
+                                        shell.bluetoothOpen = true;
+                                    } else if (statusIcon.modelData === "notifications") {
+                                        if (shell.customLayout) {
+                                            shell.notificationsScreenName = statusRail.modelData.name;
+                                            shell.notificationsOpen = true;
+                                        } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                    } else shell.current = statusIcon.modelData;
+                                }
+                            }
                         }
                     }
                 }
@@ -485,122 +738,111 @@ ShellRoot {
         model: Quickshell.screens
 
         PanelWindow {
-            id: statusRail
+            id: workspacePreview
             required property var modelData
+            readonly property var windows: shell.previewWindows()
+            readonly property string imagePath: shell.previewImage()
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
-            implicitWidth: 46
-            implicitHeight: 336
+            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+                     shell.workspacePreviewOpen && shell.previewScreenName === modelData.name &&
+                     !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 342
+            implicitHeight: 306
             anchors.left: true
-            anchors.bottom: true
-            margins.bottom: 8
+            anchors.top: true
+            margins.left: 46
+            margins.top: Math.max(8, Math.round((modelData.height - 306) / 2))
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.namespace: "quickshell:left-status-icons"
+            WlrLayershell.namespace: "quickshell:left-status-workspaces"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Rectangle {
                 anchors.fill: parent
-                radius: 20
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                anchors.topMargin: 4
+                anchors.bottomMargin: 4
+                radius: 23
                 color: Qt.rgba(0, 0, 0, 0.55)
                 border.color: "#4DFFFFFF"
                 border.width: 1
-            }
 
-            Column {
-                anchors.centerIn: parent
-                spacing: 4
+                HoverHandler {
+                    onHoveredChanged: {
+                        shell.previewPanelHovered = hovered;
+                        if (hovered) workspacePreviewCloseDelay.stop();
+                        else workspacePreviewCloseDelay.restart();
+                    }
+                }
 
-                Repeater {
-                    model: shell.entries
-                    delegate: Rectangle {
-                        id: statusIcon
-                        required property string modelData
-                        width: 38
-                        height: 38
-                        radius: 13
-                        color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
-                               (modelData === "bluetooth" && shell.bluetoothOpen) ||
-                               (modelData === "notifications" && shell.notificationsOpen) ? "#514354" :
-                               iconMouse.containsMouse ? "#4039323E" : "transparent"
+                Text {
+                    x: 17; y: 14
+                    text: "Workspace " + shell.previewWorkspaceId
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 17
+                    y: 17
+                    text: workspacePreview.windows.length + (workspacePreview.windows.length === 1 ? " window" : " windows")
+                    color: "#CFC4D0"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: shell.iconFor(statusIcon.modelData)
-                            color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 17
+                Rectangle {
+                    x: 16; y: 43
+                    width: parent.width - 32
+                    height: 171
+                    radius: 12
+                    color: "#2B252C"
+                    border.color: "#664D4650"
+                    border.width: 1
+                    clip: true
+                    Image {
+                        anchors.fill: parent
+                        source: workspacePreview.imagePath ? "file://" + workspacePreview.imagePath : ""
+                        fillMode: Image.PreserveAspectCrop
+                        visible: status === Image.Ready
+                        asynchronous: true
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !workspacePreview.imagePath
+                        text: workspacePreview.windows.length ? "Preview available after visiting" : "Empty workspace"
+                        color: "#B6AAB8"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 12
+                    }
+                }
+
+                Column {
+                    x: 17; y: 223
+                    width: parent.width - 34
+                    spacing: 5
+                    Repeater {
+                        model: workspacePreview.windows.slice(0, 3)
+                        delegate: Text {
+                            required property var modelData
+                            width: parent.width
+                            text: "•  " + modelData.class + "  ·  " + modelData.title
+                            color: "#EEE8EF"
+                            font.family: "Noto Sans"
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
                         }
-
-                        MouseArea {
-                            id: iconMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: {
-                                closeDelay.stop();
-                                if (statusIcon.modelData === "network") {
-                                    wifiCloseDelay.stop();
-                                    shell.wifiTriggerHovered = true;
-                                    shell.wifiScreenName = statusRail.modelData.name;
-                                    shell.current = "";
-                                    shell.bluetoothOpen = false;
-                                    shell.notificationsOpen = false;
-                                    shell.wifiOpen = true;
-                                } else if (statusIcon.modelData === "bluetooth") {
-                                    bluetoothCloseDelay.stop();
-                                    shell.bluetoothTriggerHovered = true;
-                                    shell.bluetoothScreenName = statusRail.modelData.name;
-                                    shell.current = "";
-                                    shell.wifiOpen = false;
-                                    shell.notificationsOpen = false;
-                                    shell.bluetoothOpen = true;
-                                } else if (statusIcon.modelData === "notifications") {
-                                    shell.wifiOpen = false;
-                                    shell.bluetoothOpen = false;
-                                    shell.current = "";
-                                    if (shell.customLayout) {
-                                        notificationsCloseDelay.stop();
-                                        shell.notificationsTriggerHovered = true;
-                                        shell.notificationsScreenName = statusRail.modelData.name;
-                                        shell.notificationsOpen = true;
-                                    } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
-                                } else {
-                                    shell.wifiOpen = false;
-                                    shell.bluetoothOpen = false;
-                                    shell.notificationsOpen = false;
-                                    shell.current = statusIcon.modelData;
-                                }
-                            }
-                            onExited: {
-                                if (statusIcon.modelData === "network") {
-                                    shell.wifiTriggerHovered = false;
-                                    wifiCloseDelay.restart();
-                                } else if (statusIcon.modelData === "bluetooth") {
-                                    shell.bluetoothTriggerHovered = false;
-                                    bluetoothCloseDelay.restart();
-                                } else if (statusIcon.modelData === "notifications") {
-                                    shell.notificationsTriggerHovered = false;
-                                    notificationsCloseDelay.restart();
-                                } else shell.closeSoon();
-                            }
-                            onClicked: {
-                                closeDelay.stop();
-                                if (statusIcon.modelData === "network") {
-                                    shell.wifiScreenName = statusRail.modelData.name;
-                                    shell.wifiOpen = true;
-                                } else if (statusIcon.modelData === "bluetooth") {
-                                    shell.bluetoothScreenName = statusRail.modelData.name;
-                                    shell.bluetoothOpen = true;
-                                } else if (statusIcon.modelData === "notifications") {
-                                    if (shell.customLayout) {
-                                        shell.notificationsScreenName = statusRail.modelData.name;
-                                        shell.notificationsOpen = true;
-                                    } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
-                                } else shell.current = statusIcon.modelData;
-                            }
-                        }
+                    }
+                    Text {
+                        visible: workspacePreview.windows.length > 3
+                        text: "+" + (workspacePreview.windows.length - 3) + " more"
+                        color: "#B6AAB8"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
                     }
                 }
             }
@@ -686,12 +928,49 @@ ShellRoot {
                     width: parent.width - 36; height: 5
                     radius: 3
                     color: "#5b4f5d"
-                    visible: shell.percentFor(shell.current) >= 0
+                    visible: shell.percentFor(shell.current) >= 0 &&
+                             shell.current !== "brightness" && shell.current !== "volume" && shell.current !== "microphone"
                     Rectangle {
                         width: parent.width * Math.max(0, Math.min(100, shell.percentFor(shell.current))) / 100
                         height: parent.height
                         radius: 3
                         color: "#e3cde0"
+                    }
+                }
+                Controls.Slider {
+                    id: levelSlider
+                    x: 18; y: 101
+                    width: parent.width - 36
+                    height: 27
+                    visible: shell.current === "brightness" || shell.current === "volume" || shell.current === "microphone"
+                    from: shell.current === "brightness" ? 5 : 0
+                    to: 100
+                    value: shell.percentFor(shell.current)
+                    onMoved: shell.stageLevel(shell.current, value)
+                    onPressedChanged: if (!pressed) shell.flushLevels()
+                    background: Rectangle {
+                        x: 0
+                        y: (levelSlider.height - height) / 2
+                        width: levelSlider.width
+                        height: 6
+                        radius: 3
+                        color: "#5b4f5d"
+                        Rectangle {
+                            width: parent.width * levelSlider.visualPosition
+                            height: parent.height
+                            radius: 3
+                            color: "#f2eaf1"
+                        }
+                    }
+                    handle: Rectangle {
+                        x: levelSlider.leftPadding + levelSlider.visualPosition * (levelSlider.availableWidth - width)
+                        y: (levelSlider.height - height) / 2
+                        width: 16
+                        height: 16
+                        radius: 8
+                        color: levelSlider.pressed ? "#ffffff" : "#f2eaf1"
+                        border.color: "#ab91a8"
+                        border.width: 1
                     }
                 }
                 Row {
