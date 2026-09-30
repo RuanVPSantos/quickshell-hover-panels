@@ -25,13 +25,32 @@ Later, from the same checkout:
 ./install.sh --update
 ```
 
+When the project is registered in RuanOps, the same actions can be run from anywhere. Without `--apply`, RuanOps shows the plan:
+
+```bash
+ruanops install quickshell_panels
+ruanops install quickshell_panels --apply
+ruanops update quickshell_panels
+ruanops update quickshell_panels --apply
+```
+
 `--update` pulls the latest commit with `git pull --ff-only` and runs the installer again. The installer copies the QML files to `~/.config/quickshell`, adds missing autostart and Top Dashboard blur rules to the Hyprland user configuration, then reloads the two panels if Hyprland is running. Changed local files are backed up under `~/.local/state/quickshell-hover-panels/backups/`. Running it again does not duplicate rules.
 
 The installer does not modify Waybar or delete local assets.
 
 ## Optional animation
 
-The Gardevoir frames used on the original desktop came from a third-party GIF and are not distributed here. If you already have them, keep the 32 PNG files named `00.png` through `31.png` in `~/.config/quickshell/top-dashboard/assets/gardevoir-frames/`; updates preserve them. Without the frames, the dashboard shows a music icon.
+The Gardevoir frames used on the original desktop came from a third-party GIF and are not distributed here. The animation component expects **exactly 32 full frames**, numbered `00.png` through `31.png`, at **232 × 232 px** with a transparent background (RGBA). It displays one frame every **100 ms**. Put the files in `~/.config/quickshell/top-dashboard/assets/gardevoir-frames/`; updates preserve them. Without the frames, the dashboard shows a music icon.
+
+To prepare a GIF you have permission to use, start with a source that already has a genuinely transparent background. Optimized GIFs often store only the pixels changed in each frame; `-coalesce` follows the GIF disposal rules to reconstruct complete frames, avoiding trails caused by treating partial updates as full images:
+
+```bash
+mkdir -p /tmp/gardevoir-frames
+magick input.gif -coalesce -background none -alpha on -resize 232x232 -gravity center \
+  -extent 232x232 -scene 0 '/tmp/gardevoir-frames/%02d.png'
+```
+
+Check that the output contains 32 PNGs before copying them into the directory above. A white background or white fringe baked into the source GIF needs a properly cut out source; converting white pixels to transparent would also erase the character's white parts. If your GIF has a different frame count or timing, adjust `GardevoirAnimation.qml` (`% 32` and `interval: 100`) to match it.
 
 ## Manual controls
 
