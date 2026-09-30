@@ -4,6 +4,7 @@ Two independent panels for Hyprland and Quickshell:
 
 - **Top Dashboard:** opens when the pointer reaches the top center. It has Dashboard, Media and Performance tabs.
 - **Edge Session:** opens from the middle of the right edge with lock, suspend, logout, reboot and power controls.
+- **Left Status:** an optional status area for the `[LEFT] WestWing` Waybar layout. Hover the bottom icons for network, Bluetooth, battery, brightness, microphone, volume, notifications and night light controls.
 
 The panels use translucent backgrounds and can run alongside any Waybar layout. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
@@ -41,6 +42,20 @@ In `ruanops lazy`, select **Atualizar painéis Quickshell** to see the plan and 
 `--update` pulls the latest commit with `git pull --ff-only` and runs the installer again. The installer copies the QML files to `~/.config/quickshell`, adds missing autostart and Top Dashboard blur rules to the Hyprland user configuration, then reloads the two panels if Hyprland is running. Changed local files are backed up under `~/.local/state/quickshell-hover-panels/backups/`. Running it again does not duplicate rules.
 
 The installer does not modify Waybar or delete local assets.
+
+### Optional WestWing status hover
+
+With the `[LEFT] WestWing` Waybar layout selected, run:
+
+```bash
+./enable-left-status.sh
+```
+
+This saves a backup under `~/.local/state/quickshell-hover-panels/`, removes only WestWing's `modules-right` icons, and starts the matching Quickshell status strip and popouts. Clock and workspaces stay in Waybar. The status strip hides while another Waybar layout is selected, so it will not duplicate that layout's icons. Running the command again is safe. Later `./install.sh --update` or `ruanops lazy` updates all enabled panels, including Left Status.
+
+The network popout has **Other Wi-Fi**, which lists nearby networks with Rofi and requests a password with Zenity when needed. The battery popout offers the installed TuneD profiles (Saver, Balanced and Desktop). Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
+
+The popouts use the local `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `swaync-client`, `tuned-adm`, Rofi, Zenity and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it. To revert manually, restore the saved WestWing backup, remove `~/.config/quickshell/left-status/enabled`, and restart Waybar and the Quickshell panel.
 
 ## Optional animation
 

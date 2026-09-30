@@ -65,6 +65,11 @@ append_unique() {
 
 install_panel top-dashboard
 install_panel edge-session
+left_status_enabled=false
+if [[ -f "$config_dir/quickshell/left-status/enabled" ]]; then
+  left_status_enabled=true
+  install_panel left-status
+fi
 
 # The animation frames are user-supplied. Updating the code never removes them.
 hypr_dir="$config_dir/hypr"
@@ -79,13 +84,23 @@ if [[ -f "$hypr_dir/hyprland.conf" ]]; then
   fi
   append_unique "$startup_file" 'exec-once = qs -c edge-session -n -d'
   append_unique "$startup_file" 'exec-once = qs -c top-dashboard -n -d'
+  if "$left_status_enabled"; then
+    append_unique "$startup_file" 'exec-once = qs -c left-status -n -d'
+    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, blur on'
+    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, ignore_alpha 0.1'
+    append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-popout, no_anim on'
+  fi
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:top-dashboard, blur on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:top-dashboard, ignore_alpha 0.1'
 fi
 
 if command -v hyprctl >/dev/null 2>&1 && hyprctl -j monitors >/dev/null 2>&1; then
   hyprctl reload >/dev/null
-  for panel in edge-session top-dashboard; do
+  panels=(edge-session top-dashboard)
+  if "$left_status_enabled"; then
+    panels+=(left-status)
+  fi
+  for panel in "${panels[@]}"; do
     if qs kill -c "$panel" >/dev/null 2>&1; then
       # IPC acknowledges the request before the process finishes exiting.
       # Starting with -n too soon can silently leave the panel stopped.
