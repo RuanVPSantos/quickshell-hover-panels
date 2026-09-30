@@ -12,7 +12,7 @@ Click the media card in Dashboard, or the cover and track details in Media, to f
 
 ## Requirements
 
-Linux with Hyprland, Quickshell (`qs`), Python 3 with Pillow, `grim`, Font Awesome 6 Free and Noto Sans. The dashboard reads `/proc`, `/sys`, MPRIS players and, when present, `~/.cache/.weather_cache`.
+Linux with Hyprland, Quickshell (`qs`), Python 3 with Pillow, `grim`, Font Awesome 6 Free and Noto Sans. Freezing a video wallpaper in Power save also needs `ffmpeg`, `swww`, and `mpvpaper`. The dashboard reads `/proc`, `/sys`, MPRIS players and, when present, `~/.cache/.weather_cache`.
 
 ## Install and update
 
@@ -57,7 +57,7 @@ With the `[LEFT] WestWing` Waybar layout selected, run:
 
 This saves a backup under `~/.local/state/quickshell-hover-panels/`, removes only WestWing's `modules-right` icons, and starts the matching Quickshell status strip and popouts. Clock and workspaces stay in Waybar. The status strip hides while another Waybar layout is selected, so it will not duplicate that layout's icons. Running the command again is safe. Later `./install.sh --update` or `ruanops lazy` updates all enabled panels, including Left Status.
 
-The battery popout offers the installed TuneD profiles (Saver, Balanced and Desktop). Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
+The battery popout offers Saver (`balanced-battery`), Balanced, Desktop, and Power save (`powersave`). Its time remaining or time to full is estimated from the battery's current energy and power readings, so it can fluctuate or be unavailable. Power save freezes the current `mpvpaper` video as a static frame using `ffmpeg` and `swww`; leaving that profile restores the video when the frozen frame is still in use. Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
 
 The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
 

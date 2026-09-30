@@ -39,7 +39,30 @@ def battery():
     except ValueError:
         percent = 0
     state = read(dev / "status") or "Unknown"
-    return {"present": True, "percent": percent, "state": state}
+    remaining_minutes = None
+    if state in ("Charging", "Discharging"):
+        energy_now = read_number(dev / "energy_now")
+        energy_full = read_number(dev / "energy_full")
+        power_now = read_number(dev / "power_now")
+        if energy_now is None or energy_full is None or power_now is None:
+            energy_now = read_number(dev / "charge_now")
+            energy_full = read_number(dev / "charge_full")
+            power_now = read_number(dev / "current_now")
+        if energy_now is not None and energy_full is not None and power_now and power_now > 0:
+            amount = energy_now if state == "Discharging" else energy_full - energy_now
+            if 0 <= amount <= energy_full:
+                minutes = round(amount * 60 / power_now)
+                if 1 <= minutes <= 24 * 60:
+                    remaining_minutes = max(1, round(minutes / 5) * 5)
+    return {"present": True, "percent": percent, "state": state,
+            "remaining_minutes": remaining_minutes}
+
+
+def read_number(path):
+    try:
+        return int(read(path))
+    except ValueError:
+        return None
 
 
 def network():

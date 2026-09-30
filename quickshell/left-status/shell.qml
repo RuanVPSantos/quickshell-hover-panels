@@ -23,9 +23,13 @@ ShellRoot {
     property bool workspacePreviewOpen: false
     property int previewWorkspaceId: 0
     property string previewScreenName: ""
-    property bool previewTriggerHovered: false
+    property string previewTriggerKey: ""
     property bool previewPanelHovered: false
     property var workspacePreviewData: ({ windows: {}, images: {} })
+    property real lastPreviewUpdate: 0
+    property string hoverCaptureKey: ""
+    property string displayedPreviewKey: ""
+    property string displayedPreviewImagePath: ""
     property var trayMenuItem: null
     property var traySubmenu: null
     property bool trayMenuOpen: false
@@ -56,7 +60,7 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; trayMenuOpen = false; }
+    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; previewTriggerKey = ""; trayMenuOpen = false; }
 
     function openTrayMenu(item, screenName, y) {
         trayMenuItem = item;
@@ -187,23 +191,48 @@ ShellRoot {
 
     Timer {
         id: workspacePreviewCloseDelay
-        interval: 100
+        interval: 220
         onTriggered: {
-            if (!shell.previewTriggerHovered && !shell.previewPanelHovered)
+            if (shell.previewTriggerKey === "" && !shell.previewPanelHovered)
                 shell.workspacePreviewOpen = false;
         }
     }
 
     function previewKey() { return previewScreenName + ":" + previewWorkspaceId; }
     function previewWindows() { return workspacePreviewData.windows[previewKey()] || []; }
-    function previewImage() { return workspacePreviewData.images[previewKey()] || ""; }
+    function previewImage() {
+        return workspacePreviewOpen && displayedPreviewKey === previewKey()
+            ? displayedPreviewImagePath : (workspacePreviewData.images[previewKey()] || "");
+    }
+    function selectWorkspacePreview(screenName, workspaceId) {
+        const key = screenName + ":" + workspaceId;
+        displayedPreviewKey = key;
+        displayedPreviewImagePath = workspacePreviewData.images[key] || "";
+        previewScreenName = screenName;
+        previewWorkspaceId = workspaceId;
+        workspacePreviewOpen = true;
+    }
+    function applyPreviewData(output) {
+        const data = JSON.parse(output);
+        if (data.updatedAt >= lastPreviewUpdate) {
+            lastPreviewUpdate = data.updatedAt;
+            workspacePreviewData = data;
+            if (workspacePreviewOpen && displayedPreviewKey === previewKey() && !displayedPreviewImagePath)
+                displayedPreviewImagePath = data.images[displayedPreviewKey] || "";
+        }
+    }
+    function captureHoveredWorkspace() {
+        if (!workspacePreviewOpen || workspaceHoverProcess.running) return;
+        hoverCaptureKey = previewKey();
+        workspaceHoverProcess.running = true;
+    }
 
     Process {
         id: workspaceCaptureProcess
         command: ["python3", shell.configHome + "/quickshell/left-status/workspace_preview.py", "capture"]
         stdout: StdioCollector {
             onStreamFinished: {
-                try { shell.workspacePreviewData = JSON.parse(this.text); }
+                try { shell.applyPreviewData(this.text); }
                 catch (error) { console.warn("Workspace capture:", error); }
             }
         }
@@ -212,12 +241,16 @@ ShellRoot {
     Process {
         id: workspaceHoverProcess
         command: ["python3", shell.configHome + "/quickshell/left-status/workspace_preview.py",
-                  "capture", shell.previewScreenName, shell.previewWorkspaceId.toString()]
+                  "capture", shell.hoverCaptureKey.split(":")[0], shell.hoverCaptureKey.split(":")[1] || "0"]
         stdout: StdioCollector {
             onStreamFinished: {
-                try { shell.workspacePreviewData = JSON.parse(this.text); }
+                try { shell.applyPreviewData(this.text); }
                 catch (error) { console.warn("Workspace hover capture:", error); }
             }
+        }
+        onExited: {
+            if (shell.workspacePreviewOpen && shell.previewKey() !== shell.hoverCaptureKey)
+                Qt.callLater(shell.captureHoveredWorkspace);
         }
     }
 
@@ -315,7 +348,18 @@ ShellRoot {
         case "notifications": return "Open the notification center or change DND.";
         case "network": return value.connected ? (value.type === "wifi" ? "Wi-Fi · " + value.signal + "% signal" : "Ethernet connected") : "Check Wi-Fi or open network settings.";
         case "bluetooth": return "Manage paired devices and Bluetooth power.";
-        case "battery": return value.present ? (value.state || "Unknown") + " · " + (status.power_profile || "Unknown") + " profile" : "No battery";
+        case "battery": {
+            if (!value.present) return "No battery";
+            const state = value.state || "Unknown";
+            const minutes = value.remaining_minutes;
+            if (minutes !== null && minutes !== undefined) {
+                const duration = (Math.floor(minutes / 60) ? Math.floor(minutes / 60) + "h " : "") +
+                                 (minutes % 60) + "m";
+                return state + " · about " + duration +
+                       (state === "Charging" ? " until full" : " remaining");
+            }
+            return state + (state === "Full" ? "" : " · time unavailable");
+        }
         case "brightness": return "Adjust the laptop display.";
         case "microphone": return "Control your microphone input.";
         case "volume": return "Control speaker output.";
@@ -375,7 +419,8 @@ ShellRoot {
         case "notifications": return [{ label: "Open", id: "notifications-open" }, { label: status.dnd ? "Disable DND" : "Enable DND", id: "dnd" }];
         case "network": return [{ label: "Other Wi-Fi", id: "wifi-picker" }, { label: "Settings", id: "network-settings" }, { label: field(name).wifi_enabled ? "Wi-Fi off" : "Wi-Fi on", id: "wifi" }];
         case "bluetooth": return [{ label: "Devices", id: "bluetooth-settings" }, { label: field(name).powered ? "Turn off" : "Turn on", id: "bluetooth-power" }];
-        case "battery": return [{ label: "Saver", id: "profile-saver" }, { label: "Balanced", id: "profile-balanced" }, { label: "Desktop", id: "profile-desktop" }];
+        case "battery": return [{ label: "Saver", id: "profile-saver" }, { label: "Balanced", id: "profile-balanced" },
+                                { label: "Desktop", id: "profile-desktop" }, { label: "Power save", id: "profile-powersave" }];
         case "brightness": return [{ label: "−10%", id: "brightness-down" }, { label: "+10%", id: "brightness-up" }];
         case "microphone": return [{ label: field("input").muted ? "Unmute" : "Mute", id: "microphone-mute" }, { label: "Mixer", id: "mixer" }];
         case "volume": return [{ label: "−5%", id: "volume-down" }, { label: field("output").muted ? "Unmute" : "Mute", id: "volume-mute" }, { label: "+5%", id: "volume-up" }];
@@ -403,6 +448,7 @@ ShellRoot {
         case "profile-saver": command = ["tuned-adm", "profile", "balanced-battery"]; break;
         case "profile-balanced": command = ["tuned-adm", "profile", "balanced"]; break;
         case "profile-desktop": command = ["tuned-adm", "profile", "desktop"]; break;
+        case "profile-powersave": command = ["tuned-adm", "profile", "powersave"]; break;
         case "brightness-down": command = ["brightnessctl", "set", "10%-"]; break;
         case "brightness-up": command = ["brightnessctl", "set", "+10%"]; break;
         case "microphone-mute": command = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]; break;
@@ -438,6 +484,7 @@ ShellRoot {
         else if (action === "profile-saver") next.power_profile = "balanced-battery";
         else if (action === "profile-balanced") next.power_profile = "balanced";
         else if (action === "profile-desktop") next.power_profile = "desktop";
+        else if (action === "profile-powersave") next.power_profile = "powersave";
         else return;
         status = next;
         suppressStatusUntil = Date.now() + (action.startsWith("profile-") ? 1800 : 700);
@@ -447,7 +494,8 @@ ShellRoot {
         if (current !== "battery") return false;
         return (action === "profile-saver" && status.power_profile === "balanced-battery") ||
                (action === "profile-balanced" && status.power_profile === "balanced") ||
-               (action === "profile-desktop" && status.power_profile === "desktop");
+               (action === "profile-desktop" && status.power_profile === "desktop") ||
+               (action === "profile-powersave" && status.power_profile === "powersave");
     }
 
     function closeSoon() { closeDelay.restart(); }
@@ -478,12 +526,20 @@ ShellRoot {
                         return;
                     }
                     shell.status = JSON.parse(this.text);
+                    if (shell.status.enabled && shell.customLayout && !wallpaperPowerProcess.running)
+                        wallpaperPowerProcess.running = true;
                     if (!shell.status.enabled) { shell.current = ""; shell.wifiOpen = false; shell.bluetoothOpen = false; }
                 } catch (error) {
                     console.warn("Left status:", error);
                 }
             }
         }
+    }
+
+    Process {
+        id: wallpaperPowerProcess
+        command: ["python3", shell.configHome + "/quickshell/left-status/wallpaper_power.py",
+                  shell.status.power_profile || ""]
     }
 
     Timer {
@@ -586,22 +642,23 @@ ShellRoot {
                         cursorShape: Qt.PointingHandCursor
                         onEntered: {
                             workspacePreviewCloseDelay.stop();
-                            shell.previewWorkspaceId = workspaceButton.modelData;
-                            shell.previewScreenName = statusRail.modelData.name;
-                            shell.previewTriggerHovered = true;
-                            shell.workspacePreviewOpen = true;
+                            shell.selectWorkspacePreview(statusRail.modelData.name, workspaceButton.modelData);
+                            shell.previewTriggerKey = shell.previewKey();
                             shell.current = "";
                             shell.wifiOpen = false;
                             shell.bluetoothOpen = false;
                             shell.notificationsOpen = false;
-                            if (!workspaceHoverProcess.running) workspaceHoverProcess.running = true;
+                            shell.captureHoveredWorkspace();
                         }
                         onExited: {
-                            shell.previewTriggerHovered = false;
-                            workspacePreviewCloseDelay.restart();
+                            if (shell.previewTriggerKey === statusRail.modelData.name + ":" + workspaceButton.modelData) {
+                                shell.previewTriggerKey = "";
+                                workspacePreviewCloseDelay.restart();
+                            }
                         }
                         onClicked: {
                             shell.workspacePreviewOpen = false;
+                            shell.previewTriggerKey = "";
                             Hyprland.dispatch("workspace " + workspaceButton.modelData);
                         }
                     }
@@ -931,6 +988,14 @@ ShellRoot {
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
+            HoverHandler {
+                onHoveredChanged: {
+                    shell.previewPanelHovered = hovered;
+                    if (hovered) workspacePreviewCloseDelay.stop();
+                    else workspacePreviewCloseDelay.restart();
+                }
+            }
+
             Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 5
@@ -941,14 +1006,6 @@ ShellRoot {
                 color: Qt.rgba(0, 0, 0, 0.55)
                 border.color: "#4DFFFFFF"
                 border.width: 1
-
-                HoverHandler {
-                    onHoveredChanged: {
-                        shell.previewPanelHovered = hovered;
-                        if (hovered) workspacePreviewCloseDelay.stop();
-                        else workspacePreviewCloseDelay.restart();
-                    }
-                }
 
                 Text {
                     x: 17; y: 14
@@ -969,6 +1026,7 @@ ShellRoot {
                 }
 
                 Rectangle {
+                    id: previewFrame
                     x: 16; y: 43
                     width: parent.width - 32
                     height: 171
@@ -977,17 +1035,60 @@ ShellRoot {
                     border.color: "#664D4650"
                     border.width: 1
                     clip: true
+                    property int activeImage: -1
+                    function activate(slot, file, key) {
+                        if (file === workspacePreview.imagePath && key === shell.previewKey())
+                            activeImage = slot;
+                    }
+                    function loadImage() {
+                        const file = workspacePreview.imagePath;
+                        const key = shell.previewKey();
+                        if (!file) { activeImage = -1; return; }
+                        if (firstImage.imageFile === file && firstImage.imageKey === key && firstImage.status === Image.Ready) {
+                            activeImage = 0;
+                            return;
+                        }
+                        if (secondImage.imageFile === file && secondImage.imageKey === key && secondImage.status === Image.Ready) {
+                            activeImage = 1;
+                            return;
+                        }
+                        const next = activeImage === 0 ? secondImage : firstImage;
+                        next.imageKey = key;
+                        next.imageFile = file;
+                    }
+                    Connections {
+                        target: workspacePreview
+                        function onImagePathChanged() { previewFrame.loadImage(); }
+                    }
+                    Component.onCompleted: loadImage()
                     Image {
+                        id: firstImage
+                        property string imageFile: ""
+                        property string imageKey: ""
                         anchors.fill: parent
-                        source: workspacePreview.imagePath ? "file://" + workspacePreview.imagePath : ""
+                        source: imageFile ? "file://" + imageFile : ""
                         fillMode: Image.PreserveAspectCrop
-                        visible: status === Image.Ready
+                        visible: previewFrame.activeImage === 0 && imageKey === shell.previewKey() && status === Image.Ready
                         asynchronous: true
+                        onStatusChanged: if (status === Image.Ready) previewFrame.activate(0, imageFile, imageKey)
+                    }
+                    Image {
+                        id: secondImage
+                        property string imageFile: ""
+                        property string imageKey: ""
+                        anchors.fill: parent
+                        source: imageFile ? "file://" + imageFile : ""
+                        fillMode: Image.PreserveAspectCrop
+                        visible: previewFrame.activeImage === 1 && imageKey === shell.previewKey() && status === Image.Ready
+                        asynchronous: true
+                        onStatusChanged: if (status === Image.Ready) previewFrame.activate(1, imageFile, imageKey)
                     }
                     Text {
                         anchors.centerIn: parent
-                        visible: !workspacePreview.imagePath
-                        text: workspacePreview.windows.length ? "Preview available after visiting" : "Empty workspace"
+                        visible: previewFrame.activeImage < 0 ||
+                                 (previewFrame.activeImage === 0 ? !firstImage.visible : !secondImage.visible)
+                        text: workspacePreview.imagePath ? "Loading preview…" :
+                              (workspacePreview.windows.length ? "Preview available after visiting" : "Empty workspace")
                         color: "#B6AAB8"
                         font.family: "Noto Sans"
                         font.pixelSize: 12
@@ -1031,7 +1132,7 @@ ShellRoot {
             screen: modelData
             visible: shell.status.enabled && shell.barVisible && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 292
-            implicitHeight: 204
+            implicitHeight: shell.current === "battery" ? 230 : 204
             anchors.left: true
             anchors.bottom: true
             margins.left: 46
@@ -1146,8 +1247,9 @@ ShellRoot {
                         border.width: 1
                     }
                 }
-                Row {
-                    x: 18; y: 139
+                Grid {
+                    x: 18; y: shell.current === "battery" ? 131 : 139
+                    columns: shell.current === "battery" ? 2 : shell.actionsFor(shell.current).length
                     spacing: 7
                     Repeater {
                         model: shell.actionsFor(shell.current)
@@ -1155,8 +1257,8 @@ ShellRoot {
                             id: actionButton
                             required property var modelData
                             readonly property int count: shell.actionsFor(shell.current).length
-                            width: count === 3 ? 76 : count === 2 ? 119 : 249
-                            height: 42
+                            width: count === 4 || count === 2 ? 119 : count === 3 ? 76 : 249
+                            height: count === 4 ? 36 : 42
                             radius: 11
                             color: shell.selectedAction(actionButton.modelData.id) ? "#6a5369" : actionMouse.containsMouse ? "#554859" : "#423746"
                             Text {
