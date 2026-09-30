@@ -86,8 +86,27 @@ fi
 if command -v hyprctl >/dev/null 2>&1 && hyprctl -j monitors >/dev/null 2>&1; then
   hyprctl reload >/dev/null
   for panel in edge-session top-dashboard; do
-    qs kill -c "$panel" >/dev/null 2>&1 || true
+    if qs kill -c "$panel" >/dev/null 2>&1; then
+      # IPC acknowledges the request before the process finishes exiting.
+      # Starting with -n too soon can silently leave the panel stopped.
+      for ((attempt=0; attempt<30; attempt++)); do
+        if ! qs list -c "$panel" -j 2>/dev/null | grep -q '"id"'; then
+          break
+        fi
+        sleep 0.1
+      done
+    fi
     hyprctl dispatch exec "qs -c $panel -n -d" >/dev/null
+    for ((attempt=0; attempt<30; attempt++)); do
+      if qs list -c "$panel" -j 2>/dev/null | grep -q '"id"'; then
+        break
+      fi
+      sleep 0.1
+    done
+    if ((attempt == 30)); then
+      echo "Failed to start Quickshell panel: $panel" >&2
+      exit 1
+    fi
   done
   echo "Panels reloaded in the current Hyprland session"
 else
