@@ -9,6 +9,7 @@ Item {
     required property int monthOffset
     required property var metrics
     required property var player
+    signal focusPlayer()
     signal previousMonth()
     signal nextMonth()
 
@@ -314,6 +315,13 @@ Item {
         color: "#3D2D2831"
         border.color: "#80463D48"
         border.width: 1
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: !!root.player
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.focusPlayer()
+        }
 
         Rectangle {
             x: 62; y: 18

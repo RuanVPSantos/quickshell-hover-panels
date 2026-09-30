@@ -7,6 +7,8 @@ Two independent panels for Hyprland and Quickshell:
 
 The panels use translucent backgrounds and can run alongside any Waybar layout. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
+Click the media card in Dashboard, or the cover and track details in Media, to focus the player window. Playback buttons retain their own actions. The panel asks the MPRIS player to raise itself and uses Hyprland's window list when the player does not do so. If several windows of the same app are open and the playing one cannot be identified, it leaves the current window focused.
+
 ## Requirements
 
 Linux with Hyprland, Quickshell (`qs`), Python 3, Font Awesome 6 Free and Noto Sans. The dashboard reads `/proc`, `/sys`, MPRIS players and, when present, `~/.cache/.weather_cache`.

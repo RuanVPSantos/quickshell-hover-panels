@@ -6,6 +6,7 @@ Rectangle {
     required property var player
     required property var players
     signal selectPlayer(var selected)
+    signal focusPlayer()
 
     readonly property bool hasDuration: player && player.length > 0 && player.length < 2147483647
     readonly property real progress: hasDuration ? Math.max(0, Math.min(1, player.position / player.length)) : 0
@@ -40,6 +41,13 @@ Rectangle {
         color: "#4039323E"
         border.color: "#514653"
         border.width: 1
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: !!root.player
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.focusPlayer()
+        }
 
         Text {
             x: 20; y: 15
@@ -108,6 +116,13 @@ Rectangle {
         id: details
         x: 282; y: 18
         width: 288; height: root.height - 36
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: !!root.player
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.focusPlayer()
+        }
 
         Text {
             x: 0; y: 6

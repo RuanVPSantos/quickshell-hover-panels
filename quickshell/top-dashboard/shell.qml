@@ -39,6 +39,23 @@ ShellRoot {
         return new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     }
 
+    function focusPlayer() {
+        if (!player)
+            return;
+
+        // MPRIS can bring the player forward itself; the Hyprland lookup below
+        // also handles players that do not implement Raise.
+        if (player.canRaise)
+            player.raise();
+
+        const configHome = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config");
+        Quickshell.execDetached([
+            "python3", configHome + "/quickshell/top-dashboard/focus_player.py",
+            player.desktopEntry || "", player.identity || "", player.dbusName || "", player.trackTitle || ""
+        ]);
+        opened = false;
+    }
+
     IpcHandler {
         target: "dashboard"
         function toggle(): void { shell.opened = !shell.opened; }
@@ -231,6 +248,7 @@ ShellRoot {
                     monthOffset: shell.monthOffset
                     metrics: shell.metrics
                     player: shell.player
+                    onFocusPlayer: shell.focusPlayer()
                     onPreviousMonth: shell.monthOffset--
                     onNextMonth: shell.monthOffset++
                 }
@@ -241,6 +259,7 @@ ShellRoot {
                     visible: shell.activeTab === 1
                     player: shell.player
                     players: Mpris.players.values
+                    onFocusPlayer: shell.focusPlayer()
                     onSelectPlayer: selected => shell.manualPlayer = selected
                 }
 
