@@ -42,14 +42,18 @@ install_panel() {
   local destination_dir="$config_dir/quickshell/$panel"
   mkdir -p "$destination_dir"
 
-  for source_file in "$repo_dir/quickshell/$panel/"*.qml "$repo_dir/quickshell/$panel/"*.py; do
+  for source_file in "$repo_dir/quickshell/$panel/"*.qml "$repo_dir/quickshell/$panel/"*.py "$repo_dir/quickshell/$panel/"*.sh; do
     [[ -f "$source_file" ]] || continue
     destination_file="$destination_dir/$(basename -- "$source_file")"
     if [[ -f "$destination_file" ]] && cmp -s -- "$source_file" "$destination_file"; then
       continue
     fi
     backup_file "$destination_file" "quickshell/$panel/$(basename -- "$source_file")"
-    install -m 0644 -- "$source_file" "$destination_file"
+    if [[ "$source_file" == *.sh ]]; then
+      install -m 0755 -- "$source_file" "$destination_file"
+    else
+      install -m 0644 -- "$source_file" "$destination_file"
+    fi
     echo "Installed $destination_file"
   done
 }
@@ -69,6 +73,25 @@ left_status_enabled=false
 if [[ -f "$config_dir/quickshell/left-status/enabled" ]]; then
   left_status_enabled=true
   install_panel left-status
+  state_file="$state_dir/quickshell-hover-panels/left-status-visible"
+  mkdir -p -- "$(dirname -- "$state_file")"
+  if [[ ! -f "$state_file" ]]; then
+    printf 'visible\n' > "$state_file"
+  fi
+  keybind_file="$config_dir/hypr/configs/Keybinds.conf"
+  old_bind='bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, pkill -SIGUSR1 waybar'
+  new_bind='bindd = $mainMod CTRL ALT, B, toggle waybar on/off, exec, $HOME/.config/quickshell/left-status/toggle-bar.sh'
+  if [[ -f "$keybind_file" ]] && grep -Fqx -- "$old_bind" "$keybind_file"; then
+    backup_file "$keybind_file" 'hypr/Keybinds.conf'
+    python3 - "$keybind_file" "$old_bind" "$new_bind" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace(sys.argv[2], sys.argv[3], 1))
+PY
+    echo "Updated Waybar toggle to include Left Status"
+  fi
 fi
 
 # The animation frames are user-supplied. Updating the code never removes them.

@@ -55,6 +55,8 @@ This saves a backup under `~/.local/state/quickshell-hover-panels/`, removes onl
 
 The network popout has **Other Wi-Fi**, which opens Rofi immediately with NetworkManager's cached list. Select **Rescan networks** there to refresh nearby networks on demand; a password is requested with Zenity when needed. The battery popout offers the installed TuneD profiles (Saver, Balanced and Desktop). Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
 
+The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
+
 The popouts use the local `nmcli`, `bluetoothctl`, `brightnessctl`, `wpctl`, `swaync-client`, `tuned-adm`, Rofi, Zenity and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it. To revert manually, restore the saved WestWing backup, remove `~/.config/quickshell/left-status/enabled`, and restart Waybar and the Quickshell panel.
 
 ## Optional animation

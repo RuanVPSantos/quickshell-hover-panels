@@ -1,17 +1,29 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Wayland
 
 ShellRoot {
     id: shell
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+    readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")
+    readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
     readonly property var entries: ["notifications", "network", "bluetooth", "battery", "brightness", "microphone", "volume", "nightlight"]
     property var status: ({ enabled: false })
     property string current: ""
     property real suppressStatusUntil: 0
     readonly property int activeIndex: Math.max(0, entries.indexOf(current))
+
+    FileView {
+        id: visibilityState
+        path: shell.stateHome + "/quickshell-hover-panels/left-status-visible"
+        watchChanges: true
+        onFileChanged: reload()
+    }
+
+    onBarVisibleChanged: if (!barVisible) current = ""
 
     function field(name) { return status[name] || {}; }
 
@@ -201,7 +213,7 @@ ShellRoot {
         PanelWindow {
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled
+            visible: shell.status.enabled && shell.barVisible && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 46
             implicitHeight: 336
             anchors.left: true
@@ -210,7 +222,7 @@ ShellRoot {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:left-status-icons"
-            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Column {
@@ -262,7 +274,7 @@ ShellRoot {
         PanelWindow {
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.current !== ""
+            visible: shell.status.enabled && shell.barVisible && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 292
             implicitHeight: 204
             anchors.left: true
@@ -272,7 +284,7 @@ ShellRoot {
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:left-status-popout"
-            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
             Rectangle {
