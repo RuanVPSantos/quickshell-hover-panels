@@ -28,6 +28,14 @@ for command_name in qs python3; do
     exit 1
   fi
 done
+if ! python3 -c 'import PIL' >/dev/null 2>&1; then
+  echo 'Missing dependency: Python Pillow (python3-pillow)' >&2
+  exit 1
+fi
+if ! command -v grim >/dev/null 2>&1; then
+  echo 'Missing dependency: grim' >&2
+  exit 1
+fi
 
 backup_file() {
   local source_file="$1" relative_path="$2"
@@ -137,6 +145,9 @@ if [[ -f "$hypr_dir/hyprland.conf" ]]; then
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-workspaces, blur on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-workspaces, ignore_alpha 0.1'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-workspaces, no_anim on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-tray-menu, blur on'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-tray-menu, ignore_alpha 0.1'
+  append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-tray-menu, no_anim on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, blur on'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, ignore_alpha 0.1'
   append_unique "$rules_file" 'layerrule = match:namespace quickshell:left-status-wifi, no_anim on'

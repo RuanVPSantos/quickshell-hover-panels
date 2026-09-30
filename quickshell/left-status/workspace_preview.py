@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageOps
+
 
 def hypr_json(what):
     try:
@@ -51,24 +53,52 @@ def main():
             key = f"{name}:{workspace_id}"
             previous = manifest.get(key, "")
             snapshot = directory / f"{name}-{workspace_id}-{os.getpid()}.jpg"
-            if workspace_id == workspace.get("id"):
-                capture_target = ["-o", name]
-            else:
-                candidates = [client for client in clients
-                              if (client.get("workspace") or {}).get("id") == workspace_id
-                              and client.get("monitor") == monitor.get("id")
-                              and client.get("mapped") and not client.get("hidden")
-                              and client.get("stableId")]
-                if not candidates:
-                    manifest.pop(key, None)
-                    continue
-                top = min(candidates, key=lambda item: item.get("focusHistoryID", 99999))
-                capture_target = ["-T", top["stableId"]]
+            candidates = [client for client in clients
+                          if (client.get("workspace") or {}).get("id") == workspace_id
+                          and client.get("monitor") == monitor.get("id")
+                          and client.get("mapped") and not client.get("hidden")
+                          and client.get("stableId")]
+            if not candidates:
+                manifest.pop(key, None)
+                if previous:
+                    Path(previous).unlink(missing_ok=True)
+                continue
             try:
-                subprocess.run(
-                    ["grim", *capture_target, "-s", "0.25", "-t", "jpeg", "-q", "72", str(snapshot)],
-                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4,
-                )
+                if workspace_id == workspace.get("id"):
+                    subprocess.run(
+                        ["grim", "-o", name, "-s", "0.25", "-t", "jpeg", "-q", "72", str(snapshot)],
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4,
+                    )
+                else:
+                    scale = 0.25
+                    canvas = Image.new("RGB", (round(monitor["width"] * scale),
+                                                round(monitor["height"] * scale)), "#17151c")
+                    # Hyprland's focus history puts the front window first. Draw it last.
+                    candidates.sort(key=lambda item: item.get("focusHistoryID", 99999), reverse=True)
+                    rendered = 0
+                    with tempfile.TemporaryDirectory(dir=directory) as scratch:
+                        for index, client in enumerate(candidates):
+                            window_file = Path(scratch) / f"{index}.jpg"
+                            result = subprocess.run(
+                                ["grim", "-T", client["stableId"], "-s", str(scale),
+                                 "-t", "jpeg", "-q", "72", str(window_file)],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4,
+                            )
+                            if result.returncode or not window_file.exists():
+                                continue
+                            with Image.open(window_file) as source:
+                                size = client.get("size", [0, 0])
+                                target_size = (max(1, round(size[0] * scale)),
+                                               max(1, round(size[1] * scale)))
+                                window_image = ImageOps.fit(source.convert("RGB"), target_size)
+                                pos = client.get("at", [0, 0])
+                                origin = (round((pos[0] - monitor["x"]) * scale),
+                                          round((pos[1] - monitor["y"]) * scale))
+                                canvas.paste(window_image, origin)
+                                rendered += 1
+                    if not rendered:
+                        raise OSError("no windows could be captured")
+                    canvas.save(snapshot, "JPEG", quality=72)
                 snapshot.chmod(0o600)
                 manifest[key] = str(snapshot)
                 if previous and previous != str(snapshot):

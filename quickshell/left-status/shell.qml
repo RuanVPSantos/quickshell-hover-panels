@@ -26,6 +26,11 @@ ShellRoot {
     property bool previewTriggerHovered: false
     property bool previewPanelHovered: false
     property var workspacePreviewData: ({ windows: {}, images: {} })
+    property var trayMenuItem: null
+    property var traySubmenu: null
+    property bool trayMenuOpen: false
+    property string trayMenuScreenName: ""
+    property int trayMenuY: 0
     property string wifiScreenName: ""
     property string bluetoothScreenName: ""
     property string notificationsScreenName: ""
@@ -51,7 +56,32 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; }
+    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; workspacePreviewOpen = false; trayMenuOpen = false; }
+
+    function openTrayMenu(item, screenName, y) {
+        trayMenuItem = item;
+        traySubmenu = null;
+        trayMenuScreenName = screenName;
+        trayMenuY = y;
+        trayMenuOpen = true;
+        trayMenuCloseDelay.stop();
+    }
+
+    QsMenuOpener {
+        id: trayRootMenu
+        menu: shell.trayMenuItem ? shell.trayMenuItem.menu : null
+    }
+
+    QsMenuOpener {
+        id: trayChildMenu
+        menu: shell.traySubmenu
+    }
+
+    Timer {
+        id: trayMenuCloseDelay
+        interval: 300
+        onTriggered: shell.trayMenuOpen = false
+    }
 
     FileView {
         id: notificationHistory
@@ -625,10 +655,16 @@ ShellRoot {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onEntered: trayMenuCloseDelay.stop()
+                            onExited: if (shell.trayMenuOpen) trayMenuCloseDelay.restart()
                             onClicked: mouse => {
                                 const item = trayButton.modelData;
-                                if (mouse.button === Qt.RightButton || item.onlyMenu)
-                                    item.secondaryActivate();
+                                if (mouse.button === Qt.RightButton || item.onlyMenu) {
+                                    if (item.hasMenu)
+                                        shell.openTrayMenu(item, statusRail.modelData.name,
+                                                           trayButton.mapToItem(null, 0, 0).y);
+                                    else item.secondaryActivate();
+                                }
                                 else if (mouse.button === Qt.MiddleButton) item.secondaryActivate();
                                 else item.activate();
                             }
@@ -725,6 +761,143 @@ ShellRoot {
                                             shell.notificationsOpen = true;
                                         } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
                                     } else shell.current = statusIcon.modelData;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: trayMenuPanel
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+                     shell.trayMenuOpen && shell.trayMenuScreenName === modelData.name &&
+                     !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 264
+            implicitHeight: Math.max(68, Math.min(490, trayMenuList.count * 35 +
+                                                      (shell.traySubmenu ? 72 : 42)))
+            anchors.left: true
+            anchors.top: true
+            margins.left: 46
+            margins.top: Math.max(8, Math.min(modelData.height - implicitHeight - 8,
+                                               shell.trayMenuY - implicitHeight + 38))
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-tray-menu"
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 4
+                radius: 19
+                color: Qt.rgba(0, 0, 0, 0.82)
+                border.color: "#66FFFFFF"
+                border.width: 1
+
+                HoverHandler {
+                    onHoveredChanged: {
+                        if (hovered) trayMenuCloseDelay.stop();
+                        else trayMenuCloseDelay.restart();
+                    }
+                }
+
+                Rectangle {
+                    visible: shell.traySubmenu !== null
+                    x: 10; y: 9
+                    width: parent.width - 20
+                    height: 31
+                    radius: 9
+                    color: backMouse.containsMouse ? "#4A424A" : "transparent"
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: 10
+                        text: "‹  Back"
+                        color: "#F4F4F6"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        id: backMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: shell.traySubmenu = null
+                    }
+                }
+
+                ListView {
+                    id: trayMenuList
+                    x: 10
+                    y: shell.traySubmenu ? 42 : 12
+                    width: parent.width - 20
+                    height: parent.height - y - 10
+                    clip: true
+                    model: shell.traySubmenu ? trayChildMenu.children : trayRootMenu.children
+                    delegate: Rectangle {
+                        id: trayMenuRow
+                        required property var modelData
+                        width: trayMenuList.width
+                        height: modelData.isSeparator ? 12 : 34
+                        radius: 8
+                        color: menuMouse.containsMouse && modelData.enabled &&
+                               !modelData.isSeparator ? "#4A424A" : "transparent"
+
+                        Rectangle {
+                            visible: trayMenuRow.modelData.isSeparator
+                            anchors.centerIn: parent
+                            width: parent.width - 14
+                            height: 1
+                            color: "#665E666A"
+                        }
+                        Image {
+                            x: 9
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 17; height: 17
+                            source: trayMenuRow.modelData.icon || ""
+                            visible: !trayMenuRow.modelData.isSeparator && source !== ""
+                            sourceSize.width: 17
+                            sourceSize.height: 17
+                        }
+                        Text {
+                            x: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 32
+                            leftPadding: trayMenuRow.modelData.icon ? 22 : 0
+                            text: trayMenuRow.modelData.text || ""
+                            color: trayMenuRow.modelData.enabled ? "#F4F4F6" : "#8F8990"
+                            font.family: "Noto Sans"
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            visible: trayMenuRow.modelData.hasChildren
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "›"
+                            color: "#D9CEDB"
+                            font.pixelSize: 17
+                        }
+                        MouseArea {
+                            id: menuMouse
+                            anchors.fill: parent
+                            enabled: trayMenuRow.modelData.enabled && !trayMenuRow.modelData.isSeparator
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (trayMenuRow.modelData.hasChildren)
+                                    shell.traySubmenu = trayMenuRow.modelData;
+                                else {
+                                    trayMenuRow.modelData.triggered();
+                                    shell.trayMenuOpen = false;
                                 }
                             }
                         }

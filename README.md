@@ -4,7 +4,7 @@ Three Quickshell panels for Hyprland:
 
 - **Top Dashboard:** opens when the pointer reaches the top center. It has Dashboard, Media and Performance tabs.
 - **Edge Session:** opens from the middle of the right edge with lock, suspend, logout, reboot and power controls.
-- **Left Status:** clock, workspace dots, and status icons. The active workspace has a filled dot. Hover a dot to see its open windows and a small preview of its display or active window. Hover the bottom icons for Wi-Fi, paired Bluetooth devices, battery, brightness, microphone, volume, notifications and night light controls.
+- **Left Status:** clock, workspace dots, and status icons. The active workspace has a filled dot. Hover a dot to see its open windows and a small preview with all windows arranged in their workspace positions. Right-click an application tray icon to open its own menu. Hover the bottom icons for Wi-Fi, paired Bluetooth devices, battery, brightness, microphone, volume, notifications and night light controls.
 
 The panels use translucent backgrounds. The custom layout runs an invisible 46 px Waybar on the left to reserve space for the Quickshell rail; it does not draw any icons. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
@@ -12,7 +12,7 @@ Click the media card in Dashboard, or the cover and track details in Media, to f
 
 ## Requirements
 
-Linux with Hyprland, Quickshell (`qs`), Python 3, Font Awesome 6 Free and Noto Sans. The dashboard reads `/proc`, `/sys`, MPRIS players and, when present, `~/.cache/.weather_cache`.
+Linux with Hyprland, Quickshell (`qs`), Python 3 with Pillow, `grim`, Font Awesome 6 Free and Noto Sans. The dashboard reads `/proc`, `/sys`, MPRIS players and, when present, `~/.cache/.weather_cache`.
 
 ## Install and update
 
