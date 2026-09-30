@@ -30,9 +30,9 @@ def split_nmcli(line):
     return parts
 
 
-def networks():
+def networks(rescan=False):
     result = run("nmcli", "-t", "-e", "yes", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
-                 "device", "wifi", "list", "--rescan", "yes")
+                 "device", "wifi", "list", "--rescan", "yes" if rescan else "no")
     if result.returncode:
         return []
     found = {}
@@ -57,18 +57,21 @@ def dialog(message, kind="error"):
 
 def main():
     choices = networks()
-    if not choices:
-        dialog("No Wi-Fi networks were found.", "info")
-        return 1
-    labels = [f"{'●' if active else '○'}  {ssid}   {signal}%{'  ·  Secured' if security != '--' else ''}"
-              for ssid, active, signal, security in choices]
-    selected = run("rofi", "-dmenu", "-i", "-p", "Wi-Fi", "-format", "i",
-                   input_text="\n".join(labels) + "\n", timeout=120)
-    if selected.returncode or not selected.stdout.strip().isdigit():
-        return 0
-    index = int(selected.stdout.strip())
-    if index >= len(choices):
-        return 1
+    while True:
+        labels = [f"{'●' if active else '○'}  {ssid}   {signal}%{'  ·  Secured' if security != '--' else ''}"
+                  for ssid, active, signal, security in choices]
+        labels.append("⟳  Rescan networks")
+        selected = run("rofi", "-dmenu", "-i", "-p", "Wi-Fi", "-format", "i",
+                       input_text="\n".join(labels) + "\n", timeout=120)
+        if selected.returncode or not selected.stdout.strip().isdigit():
+            return 0
+        index = int(selected.stdout.strip())
+        if index == len(choices):
+            choices = networks(rescan=True)
+            continue
+        if index >= len(choices):
+            return 1
+        break
     ssid, active, _, security = choices[index]
     if active:
         return 0
