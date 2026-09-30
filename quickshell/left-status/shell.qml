@@ -225,6 +225,14 @@ ShellRoot {
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
+            Rectangle {
+                anchors.fill: parent
+                radius: 20
+                color: Qt.rgba(0, 0, 0, 0.55)
+                border.color: "#4DFFFFFF"
+                border.width: 1
+            }
+
             Column {
                 anchors.centerIn: parent
                 spacing: 4
@@ -237,12 +245,12 @@ ShellRoot {
                         width: 38
                         height: 38
                         radius: 13
-                        color: shell.current === modelData ? "#75566570" : iconMouse.containsMouse ? "#554C4552" : "transparent"
+                        color: shell.current === modelData ? "#514354" : iconMouse.containsMouse ? "#4039323E" : "transparent"
 
                         Text {
                             anchors.centerIn: parent
                             text: shell.iconFor(statusIcon.modelData)
-                            color: shell.current === statusIcon.modelData ? "#ffffff" : "#e3bbd0"
+                            color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 17
                         }
@@ -293,10 +301,19 @@ ShellRoot {
                 anchors.rightMargin: 5
                 anchors.topMargin: 4
                 anchors.bottomMargin: 4
-                radius: 20
-                color: Qt.rgba(0.05, 0.045, 0.06, 0.84)
-                border.color: "#66FFFFFF"
+                radius: 26
+                color: Qt.rgba(0, 0, 0, 0.55)
+                border.color: "#4DFFFFFF"
                 border.width: 1
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    radius: 18
+                    color: "#3D2D2831"
+                    border.color: "#80463D48"
+                    border.width: 1
+                }
 
                 HoverHandler {
                     onHoveredChanged: {
@@ -308,7 +325,7 @@ ShellRoot {
                 Text {
                     x: 18; y: 17
                     text: shell.titleFor(shell.current)
-                    color: "#f8f3f7"
+                    color: "#f0e3ed"
                     font.family: "Noto Sans"
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
@@ -317,7 +334,7 @@ ShellRoot {
                     x: 18; y: 50
                     width: parent.width - 36
                     text: shell.summaryFor(shell.current)
-                    color: "#ffffff"
+                    color: "#F4F4F6"
                     font.family: "Noto Sans"
                     font.pixelSize: 20
                     font.weight: Font.DemiBold
@@ -327,7 +344,7 @@ ShellRoot {
                     x: 18; y: 84
                     width: parent.width - 36
                     text: shell.detailFor(shell.current)
-                    color: "#cfc2d0"
+                    color: "#c7b8c8"
                     font.family: "Noto Sans"
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -336,13 +353,13 @@ ShellRoot {
                     x: 18; y: 111
                     width: parent.width - 36; height: 5
                     radius: 3
-                    color: "#584e5b"
+                    color: "#5b4f5d"
                     visible: shell.percentFor(shell.current) >= 0
                     Rectangle {
                         width: parent.width * Math.max(0, Math.min(100, shell.percentFor(shell.current))) / 100
                         height: parent.height
                         radius: 3
-                        color: "#e6c5d7"
+                        color: "#e3cde0"
                     }
                 }
                 Row {
@@ -357,11 +374,11 @@ ShellRoot {
                             width: count === 3 ? 76 : count === 2 ? 119 : 249
                             height: 42
                             radius: 11
-                            color: shell.selectedAction(actionButton.modelData.id) || actionMouse.containsMouse ? "#785f75" : "#514452"
+                            color: shell.selectedAction(actionButton.modelData.id) ? "#6a5369" : actionMouse.containsMouse ? "#554859" : "#423746"
                             Text {
                                 anchors.centerIn: parent
                                 text: actionButton.modelData.label
-                                color: "#f8f3f7"
+                                color: "#F4F4F6"
                                 font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 font.weight: Font.Medium
