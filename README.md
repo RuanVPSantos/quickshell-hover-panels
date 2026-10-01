@@ -59,7 +59,7 @@ This saves a backup under `~/.local/state/quickshell-hover-panels/`, removes onl
 
 The battery popout offers Saver (`balanced-battery`), Balanced, Desktop, and Power save (`powersave`). Its time remaining or time to full is estimated from the battery's current energy and power readings, so it can fluctuate or be unavailable. Power save freezes the current `mpvpaper` video as a static frame using `ffmpeg` and `swww`; leaving that profile restores the video when the frozen frame is still in use. Volume and other toggles update their displayed state immediately and confirm it from the system shortly after. The status popout closes promptly when the pointer leaves it.
 
-The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
+The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). In the Quickshell layout, hiding the bar enables automatic reveal: hover the extreme left edge to open it, then move away from the rail and its popouts to hide it again. The revealed rail overlays windows without reserving space. Press the shortcut again to keep it visible. The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
 
 The popouts use the local `nmcli`, BlueZ, `brightnessctl`, `wpctl`, `tuned-adm` and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it.
 

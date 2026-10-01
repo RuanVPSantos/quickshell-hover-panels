@@ -14,6 +14,14 @@ ShellRoot {
     readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")
     readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
     readonly property bool customLayout: status.layout === "custom"
+    property string hoverScreenName: ""
+    property bool edgeHovered: false
+    property bool railHovered: false
+    property bool statusPanelHovered: false
+    property bool trayMenuHovered: false
+    readonly property bool railInteractionActive: edgeHovered || railHovered ||
+        wifiPanelHovered || bluetoothPanelHovered || notificationsPanelHovered ||
+        clockPanelHovered || previewPanelHovered || statusPanelHovered || trayMenuHovered
     readonly property var entries: ["notifications", "network", "bluetooth", "battery", "brightness", "microphone", "volume", "nightlight"]
     property var status: ({ enabled: false })
     property string current: ""
@@ -64,7 +72,42 @@ ShellRoot {
         onFileChanged: reload()
     }
 
-    onBarVisibleChanged: if (!barVisible) { current = ""; wifiOpen = false; bluetoothOpen = false; notificationsOpen = false; clockOpen = false; workspacePreviewOpen = false; previewTriggerKey = ""; trayMenuOpen = false; }
+    function railVisibleFor(screenName) {
+        return barVisible || (customLayout && hoverScreenName === screenName);
+    }
+
+    function closePopouts() {
+        current = "";
+        wifiOpen = false;
+        bluetoothOpen = false;
+        notificationsOpen = false;
+        clockOpen = false;
+        workspacePreviewOpen = false;
+        previewTriggerKey = "";
+        trayMenuOpen = false;
+    }
+
+    onBarVisibleChanged: {
+        hoverScreenName = "";
+        railCloseDelay.stop();
+        if (!barVisible) closePopouts();
+    }
+    onCustomLayoutChanged: if (!customLayout) hoverScreenName = ""
+    onRailInteractionActiveChanged: {
+        if (railInteractionActive) railCloseDelay.stop();
+        else if (hoverScreenName !== "") railCloseDelay.restart();
+    }
+
+    Timer {
+        id: railCloseDelay
+        interval: 550
+        onTriggered: {
+            if (!shell.railInteractionActive) {
+                shell.hoverScreenName = "";
+                shell.closePopouts();
+            }
+        }
+    }
 
     function openTrayMenu(item, screenName, y) {
         trayMenuItem = item;
@@ -269,7 +312,7 @@ ShellRoot {
 
     Timer {
         interval: 12000
-        running: shell.customLayout && shell.barVisible
+        running: shell.customLayout && (shell.barVisible || shell.hoverScreenName !== "")
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -305,6 +348,10 @@ ShellRoot {
         function debugState(): string {
             return JSON.stringify({ enabled: shell.status.enabled, layout: shell.status.layout,
                                     visible: shell.barVisible, current: shell.current,
+                                    hoverScreen: shell.hoverScreenName, railHovered: shell.railHovered,
+                                    edgeHovered: shell.edgeHovered, interaction: shell.railInteractionActive,
+                                    clockOpen: shell.clockOpen, clockTrigger: shell.clockTriggerHovered,
+                                    clockPanel: shell.clockPanelHovered, statusPanel: shell.statusPanelHovered,
                                     wifiOpen: shell.wifiOpen, trigger: shell.wifiTriggerHovered,
                                     panel: shell.wifiPanelHovered, screen: shell.wifiScreenName });
         }
@@ -329,9 +376,25 @@ ShellRoot {
         case "brightness": return "";
         case "microphone": return status.input && status.input.muted ? "" : "";
         case "volume": return status.output && status.output.muted ? "󰖁" : "";
-        case "nightlight": return status.nightlight ? "" : "☀";
+        case "nightlight": return status.nightlight ? "" : "";
         }
         return "";
+    }
+
+    function iconPixelSizeFor(name) {
+        // Normalize visible glyph bounds to roughly 18 px, rather than font em size.
+        const value = field(name);
+        switch (name) {
+        case "notifications": return status.dnd ? 16 : 19;
+        case "network": return value.connected && value.type === "wifi" ? 19 : 20;
+        case "bluetooth": return value.powered ? 19 : 18;
+        case "battery": return value.state === "Charging" ? 19 : 21;
+        case "brightness": return 24;
+        case "microphone": return status.input && status.input.muted ? 16 : 19;
+        case "volume": return status.output && status.output.muted ? 24 : 16;
+        case "nightlight": return status.nightlight ? 22 : 19;
+        }
+        return 19;
     }
 
     function titleFor(name) {
@@ -569,8 +632,47 @@ ShellRoot {
         model: Quickshell.screens
 
         PanelWindow {
+            id: leftEdgeTrigger
+            required property var modelData
+            screen: modelData
+            visible: shell.status.enabled && shell.customLayout && !shell.barVisible &&
+                     !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            implicitWidth: 2
+            anchors { left: true; top: true; bottom: true }
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:left-status-trigger"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.edgeHovered = false
+
+            Timer {
+                id: railOpenDelay
+                interval: 140
+                onTriggered: {
+                    if (leftEdgeHover.hovered)
+                        shell.hoverScreenName = leftEdgeTrigger.modelData.name;
+                }
+            }
+
+            HoverHandler {
+                id: leftEdgeHover
+                onHoveredChanged: {
+                    shell.edgeHovered = hovered;
+                    if (hovered) railOpenDelay.restart();
+                    else railOpenDelay.stop();
+                }
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
             id: statusRail
             required property var modelData
+            readonly property int edgeSpacing: 32
             readonly property var monitor: Hyprland.monitorFor(modelData)
             readonly property var workspaceIds: {
                 const ids = [1, 2, 3, 4, 5];
@@ -586,7 +688,7 @@ ShellRoot {
                        !name.includes("nm_applet") && !name.includes("nm-applet");
             })
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 46
             implicitHeight: shell.customLayout ? modelData.height : 336
             anchors.left: true
@@ -598,6 +700,11 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:left-status-icons"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.railHovered = false
+
+            HoverHandler {
+                onHoveredChanged: shell.railHovered = hovered
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -613,20 +720,25 @@ ShellRoot {
                 id: clockButton
                 visible: shell.customLayout
                 anchors.top: parent.top
-                anchors.topMargin: 24
+                anchors.topMargin: statusRail.edgeSpacing
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 38
-                height: 50
+                width: clockText.implicitWidth
+                height: clockText.implicitHeight
                 radius: 13
                 color: clockMouse.containsMouse ? "#8039323E" : "transparent"
 
                 Text {
+                    id: clockText
                     anchors.centerIn: parent
+                    topPadding: 4
+                    bottomPadding: 4
+                    leftPadding: 8
+                    rightPadding: 8
                     text: Qt.formatDateTime(shell.now, "hh\nmm")
                     horizontalAlignment: Text.AlignHCenter
                     color: "#F4F4F6"
                     font.family: "Noto Sans"
-                    font.pixelSize: 15
+                    font.pixelSize: 16
                     font.weight: Font.DemiBold
                     lineHeight: 1.1
                 }
@@ -652,16 +764,16 @@ ShellRoot {
                 visible: shell.customLayout
                 anchors.centerIn: parent
                 width: 34
-                height: Math.min(328, Math.max(48, statusRail.workspaceIds.length * 38 + 8))
+                height: Math.min(328, Math.max(48, statusRail.workspaceIds.length * 30 + 8))
                 model: statusRail.workspaceIds
                 clip: true
-                spacing: 4
+                spacing: 2
                 delegate: Rectangle {
                     id: workspaceButton
                     required property int modelData
                     readonly property bool active: modelData === statusRail.monitor?.activeWorkspace?.id
                     width: 34
-                    height: 34
+                    height: 28
                     radius: 10
                     color: workspaceMouse.containsMouse ? "#8039323E" : "transparent"
                     Rectangle {
@@ -706,7 +818,7 @@ ShellRoot {
             Column {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: shell.customLayout ? 12 : 2
+                anchors.bottomMargin: shell.customLayout ? 24 : 2
                 spacing: 10
 
                 ListView {
@@ -770,14 +882,14 @@ ShellRoot {
 
                 Column {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 4
+                    spacing: 0
                     Repeater {
                         model: shell.entries
                         delegate: Rectangle {
                             id: statusIcon
                             required property string modelData
                             width: 38
-                            height: 38
+                            height: 30
                             radius: 13
                             color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
                                    (modelData === "bluetooth" && shell.bluetoothOpen) ||
@@ -788,7 +900,7 @@ ShellRoot {
                                 text: shell.iconFor(statusIcon.modelData)
                                 color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 17
+                                font.pixelSize: Math.round(shell.iconPixelSizeFor(statusIcon.modelData) * 0.72)
                             }
                             MouseArea {
                                 id: iconMouse
@@ -872,7 +984,7 @@ ShellRoot {
             id: clockPopup
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+            visible: shell.status.enabled && shell.customLayout && shell.railVisibleFor(modelData.name) &&
                      shell.clockOpen && shell.clockScreenName === modelData.name &&
                      !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 224
@@ -907,27 +1019,30 @@ ShellRoot {
                 border.color: "#4DFFFFFF"
                 border.width: 1
 
-                Text {
-                    x: 16; y: 13
-                    text: Qt.locale("pt_BR").toString(shell.now, "dddd")
-                    color: "#CFC4D0"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 15
-                }
-                Text {
-                    x: 16; y: 41
-                    text: Qt.locale("pt_BR").toString(shell.now, "d 'de' MMMM")
-                    color: "#F4F4F6"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                }
-                Text {
-                    x: 16; y: 69
-                    text: Qt.locale("pt_BR").toString(shell.now, "yyyy")
-                    color: "#CFC4D0"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
+                Column {
+                    x: 16
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    Text {
+                        text: Qt.locale("pt_BR").toString(shell.now, "dddd")
+                        color: "#CFC4D0"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 15
+                    }
+                    Text {
+                        text: Qt.locale("pt_BR").toString(shell.now, "d 'de' MMMM")
+                        color: "#F4F4F6"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 18
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: Qt.locale("pt_BR").toString(shell.now, "yyyy")
+                        color: "#CFC4D0"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 13
+                    }
                 }
             }
         }
@@ -940,7 +1055,7 @@ ShellRoot {
             id: trayMenuPanel
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+            visible: shell.status.enabled && shell.customLayout && shell.railVisibleFor(modelData.name) &&
                      shell.trayMenuOpen && shell.trayMenuScreenName === modelData.name &&
                      !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 264
@@ -956,6 +1071,7 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:left-status-tray-menu"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.trayMenuHovered = false
 
             Rectangle {
                 anchors.fill: parent
@@ -967,6 +1083,7 @@ ShellRoot {
 
                 HoverHandler {
                     onHoveredChanged: {
+                        shell.trayMenuHovered = hovered;
                         if (hovered) trayMenuCloseDelay.stop();
                         else trayMenuCloseDelay.restart();
                     }
@@ -1079,7 +1196,7 @@ ShellRoot {
             readonly property var windows: shell.previewWindows()
             readonly property string imagePath: shell.previewImage()
             screen: modelData
-            visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
+            visible: shell.status.enabled && shell.customLayout && shell.railVisibleFor(modelData.name) &&
                      shell.workspacePreviewOpen && shell.previewScreenName === modelData.name &&
                      !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 342
@@ -1093,6 +1210,7 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:left-status-workspaces"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.previewPanelHovered = false
 
             HoverHandler {
                 onHoveredChanged: {
@@ -1234,7 +1352,7 @@ ShellRoot {
             id: statusPopup
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 292
             implicitHeight: shell.current === "battery" ? 230 : 204
             anchors.left: true
@@ -1246,6 +1364,7 @@ ShellRoot {
             WlrLayershell.namespace: "quickshell:left-status-popout"
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            onVisibleChanged: if (!visible) shell.statusPanelHovered = false
 
             Rectangle {
                 anchors.fill: parent
@@ -1260,6 +1379,7 @@ ShellRoot {
 
                 HoverHandler {
                     onHoveredChanged: {
+                        shell.statusPanelHovered = hovered;
                         if (hovered) closeDelay.stop();
                         else shell.closeSoon();
                     }
@@ -1385,7 +1505,7 @@ ShellRoot {
             id: wifiPanel
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && shell.wifiOpen && shell.wifiScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && shell.wifiOpen && shell.wifiScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 368
             implicitHeight: 400
             anchors.left: true
@@ -1434,7 +1554,7 @@ ShellRoot {
             id: bluetoothPanel
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && shell.bluetoothOpen && shell.bluetoothScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && shell.bluetoothOpen && shell.bluetoothScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 368
             implicitHeight: 400
             anchors.left: true
@@ -1472,7 +1592,7 @@ ShellRoot {
             id: notificationsWindow
             required property var modelData
             screen: modelData
-            visible: shell.status.enabled && shell.barVisible && shell.notificationsOpen && shell.notificationsScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
+            visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && shell.notificationsOpen && shell.notificationsScreenName === modelData.name && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 368
             implicitHeight: 400
             anchors.left: true
