@@ -119,7 +119,7 @@ ShellRoot {
                 visible: instance.showWindow
                 implicitWidth: instance.railWidth
                 anchors { right: true; top: true; bottom: true }
-                margins.right: 6
+                margins.right: 5
                 color: "transparent"
                 exclusionMode: ExclusionMode.Ignore
                 WlrLayershell.namespace: "quickshell:edge-session-rail"
