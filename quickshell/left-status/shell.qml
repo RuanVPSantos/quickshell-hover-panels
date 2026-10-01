@@ -618,7 +618,7 @@ ShellRoot {
                 width: 38
                 height: 50
                 radius: 13
-                color: clockMouse.containsMouse ? "#4039323E" : "transparent"
+                color: clockMouse.containsMouse ? "#8039323E" : "transparent"
 
                 Text {
                     anchors.centerIn: parent
@@ -663,7 +663,7 @@ ShellRoot {
                     width: 34
                     height: 34
                     radius: 10
-                    color: workspaceMouse.containsMouse ? "#4039323E" : "transparent"
+                    color: workspaceMouse.containsMouse ? "#8039323E" : "transparent"
                     Rectangle {
                         anchors.centerIn: parent
                         width: workspaceButton.active ? 11 : 9
@@ -724,7 +724,7 @@ ShellRoot {
                         width: 38
                         height: 38
                         radius: 13
-                        color: trayMouse.containsMouse ? "#4039323E" : "transparent"
+                        color: trayMouse.containsMouse ? "#8039323E" : "transparent"
                         Image {
                             id: trayImage
                             anchors.centerIn: parent
@@ -781,8 +781,8 @@ ShellRoot {
                             radius: 13
                             color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
                                    (modelData === "bluetooth" && shell.bluetoothOpen) ||
-                                   (modelData === "notifications" && shell.notificationsOpen) ? "#514354" :
-                                   iconMouse.containsMouse ? "#4039323E" : "transparent"
+                                   (modelData === "notifications" && shell.notificationsOpen) ? "#A6514354" :
+                                   iconMouse.containsMouse ? "#8039323E" : "transparent"
                             Text {
                                 anchors.centerIn: parent
                                 text: shell.iconFor(statusIcon.modelData)
@@ -903,7 +903,7 @@ ShellRoot {
                 anchors.topMargin: 4
                 anchors.bottomMargin: 4
                 radius: 22
-                color: Qt.rgba(0, 0, 0, 0.94)
+                color: Qt.rgba(0, 0, 0, 0.78)
                 border.color: "#4DFFFFFF"
                 border.width: 1
 
@@ -978,7 +978,7 @@ ShellRoot {
                     width: parent.width - 20
                     height: 31
                     radius: 9
-                    color: backMouse.containsMouse ? "#4A424A" : "transparent"
+                    color: backMouse.containsMouse ? "#804A424A" : "transparent"
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         x: 10
@@ -1011,7 +1011,7 @@ ShellRoot {
                         height: modelData.isSeparator ? 12 : 34
                         radius: 8
                         color: menuMouse.containsMouse && modelData.enabled &&
-                               !modelData.isSeparator ? "#4A424A" : "transparent"
+                               !modelData.isSeparator ? "#804A424A" : "transparent"
 
                         Rectangle {
                             visible: trayMenuRow.modelData.isSeparator
@@ -1355,7 +1355,7 @@ ShellRoot {
                             width: count === 4 || count === 2 ? 119 : count === 3 ? 76 : 249
                             height: count === 4 ? 36 : 42
                             radius: 11
-                            color: shell.selectedAction(actionButton.modelData.id) ? "#6a5369" : actionMouse.containsMouse ? "#554859" : "#423746"
+                            color: shell.selectedAction(actionButton.modelData.id) ? "#C06A5369" : actionMouse.containsMouse ? "#A6554859" : "#80423746"
                             Text {
                                 anchors.centerIn: parent
                                 text: actionButton.modelData.label

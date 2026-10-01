@@ -167,7 +167,7 @@ Rectangle {
                 width: ListView.view.width
                 height: 46
                 radius: 12
-                color: rowMouse.containsMouse ? "#554859" : modelData.active ? "#4039323E" : "transparent"
+                color: rowMouse.containsMouse ? "#A6554859" : modelData.active ? "#8039323E" : "transparent"
 
                 Text {
                     x: 12
@@ -247,7 +247,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 82; height: 34
             radius: 10
-            color: connectMouse.containsMouse ? "#6a5369" : "#514354"
+            color: connectMouse.containsMouse ? "#A66A5369" : "#80514354"
             Text {
                 anchors.centerIn: parent
                 text: "Connect"
@@ -278,7 +278,7 @@ Rectangle {
                 width: (picker.width - 36) / 2
                 height: 42
                 radius: 12
-                color: footerMouse.containsMouse ? "#554859" : "#423746"
+                color: footerMouse.containsMouse ? "#A6554859" : "#80423746"
                 Text {
                     anchors.centerIn: parent
                     text: footerButton.modelData

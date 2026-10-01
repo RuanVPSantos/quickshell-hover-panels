@@ -40,7 +40,7 @@ Rectangle {
         width: 64; height: 30
         radius: 10
         visible: panel.items.length > 0
-        color: clearMouse.containsMouse ? "#554859" : "#423746"
+        color: clearMouse.containsMouse ? "#A6554859" : "#80423746"
         Text {
             anchors.centerIn: parent
             text: "Clear"
@@ -83,7 +83,7 @@ Rectangle {
                 width: ListView.view.width
                 height: 72
                 radius: 12
-                color: rowMouse.containsMouse ? "#554859" : "#4039323E"
+                color: rowMouse.containsMouse ? "#A6554859" : "#8039323E"
 
                 Text {
                     x: 12; y: 8
@@ -146,7 +146,7 @@ Rectangle {
         width: parent.width - 28
         height: 42
         radius: 12
-        color: dndMouse.containsMouse ? "#554859" : "#423746"
+        color: dndMouse.containsMouse ? "#A6554859" : "#80423746"
         Text {
             anchors.centerIn: parent
             text: panel.dnd ? "Do Not Disturb on" : "Do Not Disturb off"

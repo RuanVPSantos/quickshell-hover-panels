@@ -389,7 +389,7 @@ Item {
                     required property int index
                     width: 36; height: 36
                     radius: 12
-                    color: mediaMouse.containsMouse ? "#5b4d5d" : "#3d3540"
+                    color: mediaMouse.containsMouse ? "#A65B4D5D" : "#803D3540"
                     opacity: root.player ? 1 : 0.45
                     Text {
                         anchors.centerIn: parent

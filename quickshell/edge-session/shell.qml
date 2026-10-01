@@ -176,7 +176,7 @@ ShellRoot {
                                 width: 48
                                 height: 48
                                 radius: 15
-                                color: confirming ? "#80754943" : buttonMouse.containsMouse ? "#4039323E" : "transparent"
+                                color: confirming ? "#80754943" : buttonMouse.containsMouse ? "#8039323E" : "transparent"
                                 border.color: "#B3F3AEA5"
                                 border.width: confirming ? 1 : 0
 

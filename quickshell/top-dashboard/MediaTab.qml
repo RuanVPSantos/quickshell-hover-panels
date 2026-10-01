@@ -224,7 +224,7 @@ Rectangle {
                     height: index === 2 ? 56 : 46
                     anchors.verticalCenter: parent.verticalCenter
                     radius: height / 2
-                    color: index === 2 ? "#F4F4F6" : active ? "#6a5369" : controlMouse.containsMouse && available ? "#554859" : "#423746"
+                    color: index === 2 ? "#DDF4F4F6" : active ? "#C06A5369" : controlMouse.containsMouse && available ? "#A6554859" : "#80423746"
                     opacity: available ? 1 : 0.38
 
                     Text {
@@ -311,7 +311,7 @@ Rectangle {
             x: 13; y: parent.height - 48
             width: parent.width - 26; height: 35
             radius: 12
-            color: playerMouse.containsMouse && root.players.length > 1 ? "#59495a" : "#493d4d"
+            color: playerMouse.containsMouse && root.players.length > 1 ? "#A659495A" : "#80493D4D"
             Text {
                 x: 12
                 anchors.verticalCenter: parent.verticalCenter
