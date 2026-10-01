@@ -2,7 +2,7 @@
   "name": "quickshell-reserve-left",
   "position": "left",
   "layer": "bottom",
-  "width": 46,
+  "width": 51,
   "exclusive": true,
   "passthrough": true,
   "modules-left": [],

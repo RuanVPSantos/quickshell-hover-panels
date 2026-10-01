@@ -14,6 +14,7 @@ ShellRoot {
     readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")
     readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
     readonly property bool customLayout: status.layout === "custom"
+    readonly property int railInset: 5
     property string hoverScreenName: ""
     property bool edgeHovered: false
     property bool railHovered: false
@@ -692,6 +693,7 @@ ShellRoot {
             implicitWidth: 46
             implicitHeight: shell.customLayout ? modelData.height : 336
             anchors.left: true
+            margins.left: shell.railInset
             anchors.top: shell.customLayout
             anchors.bottom: !shell.customLayout
             margins.bottom: shell.customLayout ? 0 : 8
@@ -991,7 +993,7 @@ ShellRoot {
             implicitHeight: 104
             anchors.left: true
             anchors.top: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.top: 22
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -1063,7 +1065,7 @@ ShellRoot {
                                                       (shell.traySubmenu ? 72 : 42)))
             anchors.left: true
             anchors.top: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.top: Math.max(8, Math.min(modelData.height - implicitHeight - 8,
                                                shell.trayMenuY - implicitHeight + 38))
             color: "transparent"
@@ -1203,7 +1205,7 @@ ShellRoot {
             implicitHeight: 306
             anchors.left: true
             anchors.top: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.top: Math.max(8, Math.round((modelData.height - 306) / 2))
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -1357,7 +1359,7 @@ ShellRoot {
             implicitHeight: shell.current === "battery" ? 230 : 204
             anchors.left: true
             anchors.bottom: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.bottom: Math.max(8, 8 + (7 - shell.activeIndex) * 42 - 88)
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -1510,7 +1512,7 @@ ShellRoot {
             implicitHeight: 400
             anchors.left: true
             anchors.bottom: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.bottom: 8
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -1559,7 +1561,7 @@ ShellRoot {
             implicitHeight: 400
             anchors.left: true
             anchors.bottom: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.bottom: 8
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -1597,7 +1599,7 @@ ShellRoot {
             implicitHeight: 400
             anchors.left: true
             anchors.bottom: true
-            margins.left: 46
+            margins.left: 46 + shell.railInset
             margins.bottom: 8
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
