@@ -1128,8 +1128,6 @@ ShellRoot {
                     height: 171
                     radius: 12
                     color: "#2B252C"
-                    border.color: "#664D4650"
-                    border.width: 1
                     clip: true
                     property int activeImage: -1
                     function activate(slot, file, key) {
@@ -1249,15 +1247,6 @@ ShellRoot {
                 color: Qt.rgba(0, 0, 0, 0.55)
                 border.color: "#4DFFFFFF"
                 border.width: 1
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    radius: 18
-                    color: "#3D2D2831"
-                    border.color: "#80463D48"
-                    border.width: 1
-                }
 
                 HoverHandler {
                     onHoveredChanged: {

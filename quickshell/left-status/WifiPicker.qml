@@ -141,14 +141,10 @@ Rectangle {
         elide: Text.ElideRight
     }
 
-    Rectangle {
+    Item {
         x: 14; y: 78
         width: parent.width - 28
         height: 252
-        radius: 18
-        color: "#3D2D2831"
-        border.color: "#80463D48"
-        border.width: 1
 
         Text {
             anchors.centerIn: parent
