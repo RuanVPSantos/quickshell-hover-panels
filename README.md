@@ -6,7 +6,7 @@ Three Quickshell panels for Hyprland:
 - **Edge Session:** opens from the middle of the right edge with lock, suspend, logout, reboot and power controls.
 - **Left Status:** clock, workspace dots, and status icons. Hover the clock to see the full date. The active workspace has a filled dot. Hover a dot to see its open windows and a small preview with all windows arranged in their workspace positions. Right-click an application tray icon to open its own menu. Hover the bottom icons for Wi-Fi, paired Bluetooth devices, battery, brightness, microphone, volume, notifications and night light controls.
 
-The panels use translucent backgrounds. The custom layout runs an invisible 46 px Waybar on the left to reserve space for the Quickshell rail; it does not draw any icons. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
+The dashboard, session rail and popouts use translucent backgrounds. The left rail uses a solid, near-black background. The custom layout runs an invisible 46 px Waybar on the left to reserve space for the Quickshell rail; it does not draw any icons. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
 The left rail touches the left, top and bottom screen edges without borders on those sides. Its concave inner corners follow Hyprland's outer gaps and window rounding, fitting around the left corners of tiled windows.
 

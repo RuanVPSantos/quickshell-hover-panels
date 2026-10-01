@@ -734,7 +734,7 @@ ShellRoot {
                     anchors.topMargin: shell.customLayout ? 8 : 0
                     anchors.bottomMargin: shell.customLayout ? 8 : 0
                     radius: 20
-                    color: Qt.rgba(0, 0, 0, 0.55)
+                    color: "#0C0C10"
                     border.color: "#4DFFFFFF"
                     border.width: 1
                 }
