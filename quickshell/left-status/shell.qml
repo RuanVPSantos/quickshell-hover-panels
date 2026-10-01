@@ -14,7 +14,7 @@ ShellRoot {
     readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")
     readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
     readonly property bool customLayout: status.layout === "custom"
-    readonly property int railInset: 5
+    readonly property int railInset: 0
     readonly property var railGeometry: status.rail_geometry || ({ gap_top: 4, gap_bottom: 4, gap_left: 4, rounding: 10 })
     property string hoverScreenName: ""
     property bool edgeHovered: false
@@ -717,9 +717,10 @@ ShellRoot {
             RailBackground {
                 visible: shell.customLayout
                 width: parent.width
-                y: shell.railGeometry.gap_top
-                height: Math.max(1, parent.height - shell.railGeometry.gap_top - shell.railGeometry.gap_bottom)
+                height: parent.height
                 cornerRadius: shell.railGeometry.rounding
+                topGap: shell.railGeometry.gap_top
+                bottomGap: shell.railGeometry.gap_bottom
             }
 
             Item {
