@@ -735,8 +735,6 @@ ShellRoot {
                     anchors.bottomMargin: shell.customLayout ? 8 : 0
                     radius: 20
                     color: "#0C0C10"
-                    border.color: "#4DFFFFFF"
-                    border.width: 1
                 }
 
                 Rectangle {

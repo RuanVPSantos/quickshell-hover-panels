@@ -48,30 +48,5 @@ Item {
             PathLine { x: 0; y: 0 }
         }
 
-        ShapePath {
-            strokeWidth: 1
-            strokeColor: "#4DFFFFFF"
-            fillColor: "transparent"
-            startX: background.outerRight
-            startY: background.curveTop
-
-            PathCubic {
-                x: background.bodyRight
-                y: background.curveTop + background.radius
-                control1X: background.outerRight - background.curveHandle
-                control1Y: background.curveTop
-                control2X: background.bodyRight
-                control2Y: background.curveTop + background.radius - background.curveHandle
-            }
-            PathLine { x: background.bodyRight; y: background.curveBottom - background.radius }
-            PathCubic {
-                x: background.outerRight
-                y: background.curveBottom
-                control1X: background.bodyRight
-                control1Y: background.curveBottom - background.radius + background.curveHandle
-                control2X: background.outerRight - background.curveHandle
-                control2Y: background.curveBottom
-            }
-        }
     }
 }
