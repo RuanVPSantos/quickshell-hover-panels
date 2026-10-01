@@ -903,7 +903,7 @@ ShellRoot {
                 anchors.topMargin: 4
                 anchors.bottomMargin: 4
                 radius: 22
-                color: Qt.rgba(0, 0, 0, 0.78)
+                color: Qt.rgba(0, 0, 0, 0.65)
                 border.color: "#4DFFFFFF"
                 border.width: 1
 
