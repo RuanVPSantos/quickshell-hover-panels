@@ -875,8 +875,8 @@ ShellRoot {
             visible: shell.status.enabled && shell.customLayout && shell.barVisible &&
                      shell.clockOpen && shell.clockScreenName === modelData.name &&
                      !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
-            implicitWidth: 256
-            implicitHeight: 78
+            implicitWidth: 224
+            implicitHeight: 104
             anchors.left: true
             anchors.top: true
             margins.left: 46
@@ -898,26 +898,36 @@ ShellRoot {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: 4
-                radius: 20
-                color: Qt.rgba(0, 0, 0, 0.65)
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                anchors.topMargin: 4
+                anchors.bottomMargin: 4
+                radius: 22
+                color: Qt.rgba(0, 0, 0, 0.82)
                 border.color: "#4DFFFFFF"
                 border.width: 1
 
                 Text {
-                    x: 15; y: 11
+                    x: 16; y: 13
                     text: Qt.locale("pt_BR").toString(shell.now, "dddd")
                     color: "#CFC4D0"
                     font.family: "Noto Sans"
-                    font.pixelSize: 12
+                    font.pixelSize: 15
                 }
                 Text {
-                    x: 15; y: 31
-                    text: Qt.locale("pt_BR").toString(shell.now, "d 'de' MMMM 'de' yyyy")
+                    x: 16; y: 41
+                    text: Qt.locale("pt_BR").toString(shell.now, "d 'de' MMMM")
                     color: "#F4F4F6"
                     font.family: "Noto Sans"
-                    font.pixelSize: 14
+                    font.pixelSize: 18
                     font.weight: Font.DemiBold
+                }
+                Text {
+                    x: 16; y: 69
+                    text: Qt.locale("pt_BR").toString(shell.now, "yyyy")
+                    color: "#CFC4D0"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 13
                 }
             }
         }
