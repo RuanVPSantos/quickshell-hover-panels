@@ -19,6 +19,8 @@ ShellRoot {
         Scope {
             id: instance
             required property var modelData
+            readonly property int railWidth: 52
+            readonly property int railHeight: 244
 
             property bool panelOpen: false
             property bool showWindow: false
@@ -115,7 +117,7 @@ ShellRoot {
                 id: railWindow
                 screen: instance.modelData
                 visible: instance.showWindow
-                implicitWidth: 64
+                implicitWidth: instance.railWidth
                 anchors { right: true; top: true; bottom: true }
                 color: "transparent"
                 exclusionMode: ExclusionMode.Ignore
@@ -124,18 +126,18 @@ ShellRoot {
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
                 mask: Region {
-                    y: Math.max(0, Math.round((railWindow.height - 304) / 2))
+                    y: Math.max(0, Math.round((railWindow.height - instance.railHeight) / 2))
                     width: railWindow.width
-                    height: 304
+                    height: instance.railHeight
                 }
 
                 Rectangle {
                     id: rail
-                    width: 64
-                    height: 304
-                    x: instance.expanded ? 0 : 64
+                    width: instance.railWidth
+                    height: instance.railHeight
+                    x: instance.expanded ? 0 : width
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: 22
+                    radius: 20
                     color: Qt.rgba(0, 0, 0, 0.42)
                     border.color: "#4DFFFFFF"
                     border.width: 1
@@ -156,7 +158,7 @@ ShellRoot {
 
                     Column {
                         anchors.centerIn: parent
-                        spacing: 8
+                        spacing: 4
 
                         Repeater {
                             model: [
@@ -173,9 +175,9 @@ ShellRoot {
                                 required property int index
                                 readonly property bool confirming: instance.pendingIndex === index
 
-                                width: 48
-                                height: 48
-                                radius: 15
+                                width: 42
+                                height: 36
+                                radius: 13
                                 color: confirming ? "#80754943" : buttonMouse.containsMouse ? "#8039323E" : "transparent"
                                 border.color: "#B3F3AEA5"
                                 border.width: confirming ? 1 : 0
@@ -185,17 +187,17 @@ ShellRoot {
                                     text: actionButton.modelData.icon
                                     color: actionButton.confirming ? "#ffdfda" : "#f0e7ef"
                                     font.family: "Font Awesome 6 Free"
-                                    font.pixelSize: 19
+                                    font.pixelSize: 16
                                     font.weight: Font.Black
                                 }
 
                                 Rectangle {
                                     visible: actionButton.confirming
-                                    width: 8
-                                    height: 8
-                                    radius: 4
+                                    width: 5
+                                    height: 5
+                                    radius: 2.5
                                     color: "#ffd5cd"
-                                    anchors { right: parent.right; top: parent.top; rightMargin: 6; topMargin: 6 }
+                                    anchors { right: parent.right; top: parent.top; rightMargin: 4; topMargin: 4 }
                                 }
 
                                 MouseArea {
