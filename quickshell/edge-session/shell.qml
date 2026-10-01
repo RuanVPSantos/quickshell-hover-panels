@@ -176,9 +176,9 @@ ShellRoot {
                                 width: 48
                                 height: 48
                                 radius: 15
-                                color: confirming ? "#80754943" : buttonMouse.containsMouse ? "#66504550" : "#1A000000"
-                                border.color: confirming ? "#B3F3AEA5" : buttonMouse.containsMouse ? "#80887A89" : "#334D444E"
-                                border.width: 1
+                                color: confirming ? "#80754943" : buttonMouse.containsMouse ? "#4039323E" : "transparent"
+                                border.color: "#B3F3AEA5"
+                                border.width: confirming ? 1 : 0
 
                                 Text {
                                     anchors.centerIn: parent

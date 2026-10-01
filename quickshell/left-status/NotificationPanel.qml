@@ -46,7 +46,7 @@ Rectangle {
             text: "Clear"
             color: "#F4F4F6"
             font.family: "Noto Sans"
-            font.pixelSize: 11
+            font.pixelSize: 12
         }
         MouseArea {
             id: clearMouse
@@ -152,7 +152,7 @@ Rectangle {
             text: panel.dnd ? "Do Not Disturb on" : "Do Not Disturb off"
             color: "#F4F4F6"
             font.family: "Noto Sans"
-            font.pixelSize: 11
+            font.pixelSize: 12
         }
         MouseArea {
             id: dndMouse

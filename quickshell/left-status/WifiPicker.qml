@@ -253,7 +253,7 @@ Rectangle {
                 text: "Connect"
                 color: "#F4F4F6"
                 font.family: "Noto Sans"
-                font.pixelSize: 11
+                font.pixelSize: 12
             }
             MouseArea {
                 id: connectMouse
@@ -284,7 +284,7 @@ Rectangle {
                     text: footerButton.modelData
                     color: "#F4F4F6"
                     font.family: "Noto Sans"
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
                 MouseArea {
                     id: footerMouse

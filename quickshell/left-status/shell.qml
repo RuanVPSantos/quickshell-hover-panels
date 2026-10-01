@@ -1361,7 +1361,7 @@ ShellRoot {
                                 text: actionButton.modelData.label
                                 color: "#F4F4F6"
                                 font.family: "Noto Sans"
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 font.weight: Font.Medium
                             }
                             MouseArea {
