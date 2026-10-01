@@ -15,6 +15,7 @@ ShellRoot {
     readonly property bool barVisible: visibilityState.text().trim() !== "hidden"
     readonly property bool customLayout: status.layout === "custom"
     readonly property int railInset: 5
+    readonly property var railGeometry: status.rail_geometry || ({ gap_top: 4, gap_bottom: 4, gap_left: 4, rounding: 10 })
     property string hoverScreenName: ""
     property bool edgeHovered: false
     property bool railHovered: false
@@ -690,7 +691,7 @@ ShellRoot {
             })
             screen: modelData
             visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && !(monitor?.activeWorkspace?.hasFullscreen ?? false)
-            implicitWidth: 46
+            implicitWidth: shell.customLayout ? 46 + shell.railGeometry.gap_left + shell.railGeometry.rounding : 46
             implicitHeight: shell.customLayout ? modelData.height : 336
             anchors.left: true
             margins.left: shell.railInset
@@ -708,268 +709,288 @@ ShellRoot {
                 onHoveredChanged: shell.railHovered = hovered
             }
 
-            Rectangle {
-                anchors.fill: parent
-                anchors.topMargin: shell.customLayout ? 8 : 0
-                anchors.bottomMargin: shell.customLayout ? 8 : 0
-                radius: 20
-                color: Qt.rgba(0, 0, 0, 0.55)
-                border.color: "#4DFFFFFF"
-                border.width: 1
+            mask: Region {
+                width: 46
+                height: statusRail.height
             }
 
-            Rectangle {
-                id: clockButton
+            RailBackground {
                 visible: shell.customLayout
-                anchors.top: parent.top
-                anchors.topMargin: statusRail.edgeSpacing
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: clockText.implicitWidth
-                height: clockText.implicitHeight
-                radius: 13
-                color: clockMouse.containsMouse ? "#8039323E" : "transparent"
+                width: parent.width
+                y: shell.railGeometry.gap_top
+                height: Math.max(1, parent.height - shell.railGeometry.gap_top - shell.railGeometry.gap_bottom)
+                cornerRadius: shell.railGeometry.rounding
+            }
 
-                Text {
-                    id: clockText
-                    anchors.centerIn: parent
-                    topPadding: 4
-                    bottomPadding: 4
-                    leftPadding: 8
-                    rightPadding: 8
-                    text: Qt.formatDateTime(shell.now, "hh\nmm")
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "#F4F4F6"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 16
-                    font.weight: Font.DemiBold
-                    lineHeight: 1.1
-                }
+            Item {
+                id: railContent
+                width: 46
+                height: parent.height
 
-                MouseArea {
-                    id: clockMouse
+                Rectangle {
+                    visible: !shell.customLayout
                     anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: {
-                        clockCloseDelay.stop();
-                        shell.clockScreenName = statusRail.modelData.name;
-                        shell.clockTriggerHovered = true;
-                        shell.clockOpen = true;
-                    }
-                    onExited: {
-                        shell.clockTriggerHovered = false;
-                        clockCloseDelay.restart();
-                    }
+                    anchors.topMargin: shell.customLayout ? 8 : 0
+                    anchors.bottomMargin: shell.customLayout ? 8 : 0
+                    radius: 20
+                    color: Qt.rgba(0, 0, 0, 0.55)
+                    border.color: "#4DFFFFFF"
+                    border.width: 1
                 }
-            }
 
-            ListView {
-                visible: shell.customLayout
-                anchors.centerIn: parent
-                width: 34
-                height: Math.min(328, Math.max(48, statusRail.workspaceIds.length * 30 + 8))
-                model: statusRail.workspaceIds
-                clip: true
-                spacing: 2
-                delegate: Rectangle {
-                    id: workspaceButton
-                    required property int modelData
-                    readonly property bool active: modelData === statusRail.monitor?.activeWorkspace?.id
-                    width: 34
-                    height: 28
-                    radius: 10
-                    color: workspaceMouse.containsMouse ? "#8039323E" : "transparent"
-                    Rectangle {
+                Rectangle {
+                    id: clockButton
+                    visible: shell.customLayout
+                    anchors.top: parent.top
+                    anchors.topMargin: statusRail.edgeSpacing
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: clockText.implicitWidth
+                    height: clockText.implicitHeight
+                    radius: 13
+                    color: clockMouse.containsMouse ? "#8039323E" : "transparent"
+
+                    Text {
+                        id: clockText
                         anchors.centerIn: parent
-                        width: workspaceButton.active ? 11 : 9
-                        height: width
-                        radius: width / 2
-                        color: workspaceButton.active ? "#e4d3e1" : "transparent"
-                        border.color: "#e4d3e1"
-                        border.width: workspaceButton.active ? 0 : 1.5
+                        topPadding: 4
+                        bottomPadding: 4
+                        leftPadding: 8
+                        rightPadding: 8
+                        text: Qt.formatDateTime(shell.now, "hh\nmm")
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "#F4F4F6"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                        lineHeight: 1.1
                     }
+
                     MouseArea {
-                        id: workspaceMouse
+                        id: clockMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
                         onEntered: {
-                            workspacePreviewCloseDelay.stop();
-                            shell.selectWorkspacePreview(statusRail.modelData.name, workspaceButton.modelData);
-                            shell.previewTriggerKey = shell.previewKey();
-                            shell.current = "";
-                            shell.wifiOpen = false;
-                            shell.bluetoothOpen = false;
-                            shell.notificationsOpen = false;
-                            shell.captureHoveredWorkspace();
+                            clockCloseDelay.stop();
+                            shell.clockScreenName = statusRail.modelData.name;
+                            shell.clockTriggerHovered = true;
+                            shell.clockOpen = true;
                         }
                         onExited: {
-                            if (shell.previewTriggerKey === statusRail.modelData.name + ":" + workspaceButton.modelData) {
-                                shell.previewTriggerKey = "";
-                                workspacePreviewCloseDelay.restart();
-                            }
-                        }
-                        onClicked: {
-                            shell.workspacePreviewOpen = false;
-                            shell.previewTriggerKey = "";
-                            Hyprland.dispatch("workspace " + workspaceButton.modelData);
+                            shell.clockTriggerHovered = false;
+                            clockCloseDelay.restart();
                         }
                     }
                 }
-            }
-
-            Column {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: shell.customLayout ? 24 : 2
-                spacing: 10
 
                 ListView {
-                    id: trayList
-                    visible: shell.customLayout && statusRail.trayItems.length > 0
-                    width: 38
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    height: visible ? Math.min(statusRail.trayItems.length * 42, Math.max(42, statusRail.height / 2 - 350)) : 0
+                    visible: shell.customLayout
+                    anchors.centerIn: parent
+                    width: 34
+                    height: Math.min(328, Math.max(48, statusRail.workspaceIds.length * 30 + 8))
+                    model: statusRail.workspaceIds
                     clip: true
-                    spacing: 4
-                    model: statusRail.trayItems
+                    spacing: 2
                     delegate: Rectangle {
-                        id: trayButton
-                        required property var modelData
-                        width: 38
-                        height: 38
-                        radius: 13
-                        color: trayMouse.containsMouse ? "#8039323E" : "transparent"
-                        Image {
-                            id: trayImage
+                        id: workspaceButton
+                        required property int modelData
+                        readonly property bool active: modelData === statusRail.monitor?.activeWorkspace?.id
+                        width: 34
+                        height: 28
+                        radius: 10
+                        color: workspaceMouse.containsMouse ? "#8039323E" : "transparent"
+                        Rectangle {
                             anchors.centerIn: parent
-                            width: 21
-                            height: 21
-                            source: trayButton.modelData.icon
-                            sourceSize.width: 21
-                            sourceSize.height: 21
-                            fillMode: Image.PreserveAspectFit
-                            visible: status === Image.Ready
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            visible: trayImage.status !== Image.Ready
-                            text: "󰀻"
-                            color: "#F4F4F6"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 17
+                            width: workspaceButton.active ? 11 : 9
+                            height: width
+                            radius: width / 2
+                            color: workspaceButton.active ? "#e4d3e1" : "transparent"
+                            border.color: "#e4d3e1"
+                            border.width: workspaceButton.active ? 0 : 1.5
                         }
                         MouseArea {
-                            id: trayMouse
+                            id: workspaceMouse
                             anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onEntered: trayMenuCloseDelay.stop()
-                            onExited: if (shell.trayMenuOpen) trayMenuCloseDelay.restart()
-                            onClicked: mouse => {
-                                const item = trayButton.modelData;
-                                if (mouse.button === Qt.RightButton || item.onlyMenu) {
-                                    if (item.hasMenu)
-                                        shell.openTrayMenu(item, statusRail.modelData.name,
-                                                           trayButton.mapToItem(null, 0, 0).y);
-                                    else item.secondaryActivate();
-                                }
-                                else if (mouse.button === Qt.MiddleButton) item.secondaryActivate();
-                                else item.activate();
+                            onEntered: {
+                                workspacePreviewCloseDelay.stop();
+                                shell.selectWorkspacePreview(statusRail.modelData.name, workspaceButton.modelData);
+                                shell.previewTriggerKey = shell.previewKey();
+                                shell.current = "";
+                                shell.wifiOpen = false;
+                                shell.bluetoothOpen = false;
+                                shell.notificationsOpen = false;
+                                shell.captureHoveredWorkspace();
                             }
-                            onWheel: wheel => trayButton.modelData.scroll(wheel.angleDelta.y, false)
+                            onExited: {
+                                if (shell.previewTriggerKey === statusRail.modelData.name + ":" + workspaceButton.modelData) {
+                                    shell.previewTriggerKey = "";
+                                    workspacePreviewCloseDelay.restart();
+                                }
+                            }
+                            onClicked: {
+                                shell.workspacePreviewOpen = false;
+                                shell.previewTriggerKey = "";
+                                Hyprland.dispatch("workspace " + workspaceButton.modelData);
+                            }
                         }
                     }
                 }
 
                 Column {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 0
-                    Repeater {
-                        model: shell.entries
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: shell.customLayout ? 24 : 2
+                    spacing: 10
+
+                    ListView {
+                        id: trayList
+                        visible: shell.customLayout && statusRail.trayItems.length > 0
+                        width: 38
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        height: visible ? Math.min(statusRail.trayItems.length * 42, Math.max(42, statusRail.height / 2 - 350)) : 0
+                        clip: true
+                        spacing: 4
+                        model: statusRail.trayItems
                         delegate: Rectangle {
-                            id: statusIcon
-                            required property string modelData
+                            id: trayButton
+                            required property var modelData
                             width: 38
-                            height: 30
+                            height: 38
                             radius: 13
-                            color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
-                                   (modelData === "bluetooth" && shell.bluetoothOpen) ||
-                                   (modelData === "notifications" && shell.notificationsOpen) ? "#A6514354" :
-                                   iconMouse.containsMouse ? "#8039323E" : "transparent"
+                            color: trayMouse.containsMouse ? "#8039323E" : "transparent"
+                            Image {
+                                id: trayImage
+                                anchors.centerIn: parent
+                                width: 21
+                                height: 21
+                                source: trayButton.modelData.icon
+                                sourceSize.width: 21
+                                sourceSize.height: 21
+                                fillMode: Image.PreserveAspectFit
+                                visible: status === Image.Ready
+                            }
                             Text {
                                 anchors.centerIn: parent
-                                text: shell.iconFor(statusIcon.modelData)
-                                color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
+                                visible: trayImage.status !== Image.Ready
+                                text: "󰀻"
+                                color: "#F4F4F6"
                                 font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: Math.round(shell.iconPixelSizeFor(statusIcon.modelData) * 0.72)
+                                font.pixelSize: 17
                             }
                             MouseArea {
-                                id: iconMouse
+                                id: trayMouse
                                 anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onEntered: {
-                                    closeDelay.stop();
-                                    if (statusIcon.modelData === "network") {
-                                        wifiCloseDelay.stop();
-                                        shell.wifiTriggerHovered = true;
-                                        shell.wifiScreenName = statusRail.modelData.name;
-                                        shell.current = "";
-                                        shell.bluetoothOpen = false;
-                                        shell.notificationsOpen = false;
-                                        shell.wifiOpen = true;
-                                    } else if (statusIcon.modelData === "bluetooth") {
-                                        bluetoothCloseDelay.stop();
-                                        shell.bluetoothTriggerHovered = true;
-                                        shell.bluetoothScreenName = statusRail.modelData.name;
-                                        shell.current = "";
-                                        shell.wifiOpen = false;
-                                        shell.notificationsOpen = false;
-                                        shell.bluetoothOpen = true;
-                                    } else if (statusIcon.modelData === "notifications") {
-                                        shell.wifiOpen = false;
-                                        shell.bluetoothOpen = false;
-                                        shell.current = "";
-                                        if (shell.customLayout) {
-                                            notificationsCloseDelay.stop();
-                                            shell.notificationsTriggerHovered = true;
-                                            shell.notificationsScreenName = statusRail.modelData.name;
-                                            shell.notificationsOpen = true;
-                                        } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
-                                    } else {
-                                        shell.wifiOpen = false;
-                                        shell.bluetoothOpen = false;
-                                        shell.notificationsOpen = false;
-                                        shell.current = statusIcon.modelData;
+                                onEntered: trayMenuCloseDelay.stop()
+                                onExited: if (shell.trayMenuOpen) trayMenuCloseDelay.restart()
+                                onClicked: mouse => {
+                                    const item = trayButton.modelData;
+                                    if (mouse.button === Qt.RightButton || item.onlyMenu) {
+                                        if (item.hasMenu)
+                                            shell.openTrayMenu(item, statusRail.modelData.name,
+                                                               trayButton.mapToItem(null, 0, 0).y);
+                                        else item.secondaryActivate();
                                     }
+                                    else if (mouse.button === Qt.MiddleButton) item.secondaryActivate();
+                                    else item.activate();
                                 }
-                                onExited: {
-                                    if (statusIcon.modelData === "network") {
-                                        shell.wifiTriggerHovered = false;
-                                        wifiCloseDelay.restart();
-                                    } else if (statusIcon.modelData === "bluetooth") {
-                                        shell.bluetoothTriggerHovered = false;
-                                        bluetoothCloseDelay.restart();
-                                    } else if (statusIcon.modelData === "notifications") {
-                                        shell.notificationsTriggerHovered = false;
-                                        notificationsCloseDelay.restart();
-                                    } else shell.closeSoon();
+                                onWheel: wheel => trayButton.modelData.scroll(wheel.angleDelta.y, false)
+                            }
+                        }
+                    }
+
+                    Column {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 0
+                        Repeater {
+                            model: shell.entries
+                            delegate: Rectangle {
+                                id: statusIcon
+                                required property string modelData
+                                width: 38
+                                height: 30
+                                radius: 13
+                                color: shell.current === modelData || (modelData === "network" && shell.wifiOpen) ||
+                                       (modelData === "bluetooth" && shell.bluetoothOpen) ||
+                                       (modelData === "notifications" && shell.notificationsOpen) ? "#A6514354" :
+                                       iconMouse.containsMouse ? "#8039323E" : "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: shell.iconFor(statusIcon.modelData)
+                                    color: shell.current === statusIcon.modelData ? "#ffffff" : "#F4F4F6"
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: Math.round(shell.iconPixelSizeFor(statusIcon.modelData) * 0.72)
                                 }
-                                onClicked: {
-                                    closeDelay.stop();
-                                    if (statusIcon.modelData === "network") {
-                                        shell.wifiScreenName = statusRail.modelData.name;
-                                        shell.wifiOpen = true;
-                                    } else if (statusIcon.modelData === "bluetooth") {
-                                        shell.bluetoothScreenName = statusRail.modelData.name;
-                                        shell.bluetoothOpen = true;
-                                    } else if (statusIcon.modelData === "notifications") {
-                                        if (shell.customLayout) {
-                                            shell.notificationsScreenName = statusRail.modelData.name;
-                                            shell.notificationsOpen = true;
-                                        } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
-                                    } else shell.current = statusIcon.modelData;
+                                MouseArea {
+                                    id: iconMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onEntered: {
+                                        closeDelay.stop();
+                                        if (statusIcon.modelData === "network") {
+                                            wifiCloseDelay.stop();
+                                            shell.wifiTriggerHovered = true;
+                                            shell.wifiScreenName = statusRail.modelData.name;
+                                            shell.current = "";
+                                            shell.bluetoothOpen = false;
+                                            shell.notificationsOpen = false;
+                                            shell.wifiOpen = true;
+                                        } else if (statusIcon.modelData === "bluetooth") {
+                                            bluetoothCloseDelay.stop();
+                                            shell.bluetoothTriggerHovered = true;
+                                            shell.bluetoothScreenName = statusRail.modelData.name;
+                                            shell.current = "";
+                                            shell.wifiOpen = false;
+                                            shell.notificationsOpen = false;
+                                            shell.bluetoothOpen = true;
+                                        } else if (statusIcon.modelData === "notifications") {
+                                            shell.wifiOpen = false;
+                                            shell.bluetoothOpen = false;
+                                            shell.current = "";
+                                            if (shell.customLayout) {
+                                                notificationsCloseDelay.stop();
+                                                shell.notificationsTriggerHovered = true;
+                                                shell.notificationsScreenName = statusRail.modelData.name;
+                                                shell.notificationsOpen = true;
+                                            } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                        } else {
+                                            shell.wifiOpen = false;
+                                            shell.bluetoothOpen = false;
+                                            shell.notificationsOpen = false;
+                                            shell.current = statusIcon.modelData;
+                                        }
+                                    }
+                                    onExited: {
+                                        if (statusIcon.modelData === "network") {
+                                            shell.wifiTriggerHovered = false;
+                                            wifiCloseDelay.restart();
+                                        } else if (statusIcon.modelData === "bluetooth") {
+                                            shell.bluetoothTriggerHovered = false;
+                                            bluetoothCloseDelay.restart();
+                                        } else if (statusIcon.modelData === "notifications") {
+                                            shell.notificationsTriggerHovered = false;
+                                            notificationsCloseDelay.restart();
+                                        } else shell.closeSoon();
+                                    }
+                                    onClicked: {
+                                        closeDelay.stop();
+                                        if (statusIcon.modelData === "network") {
+                                            shell.wifiScreenName = statusRail.modelData.name;
+                                            shell.wifiOpen = true;
+                                        } else if (statusIcon.modelData === "bluetooth") {
+                                            shell.bluetoothScreenName = statusRail.modelData.name;
+                                            shell.bluetoothOpen = true;
+                                        } else if (statusIcon.modelData === "notifications") {
+                                            if (shell.customLayout) {
+                                                shell.notificationsScreenName = statusRail.modelData.name;
+                                                shell.notificationsOpen = true;
+                                            } else Quickshell.execDetached(["swaync-client", "-op", "-sw"]);
+                                        } else shell.current = statusIcon.modelData;
+                                    }
                                 }
                             }
                         }

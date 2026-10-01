@@ -8,6 +8,8 @@ Three Quickshell panels for Hyprland:
 
 The panels use translucent backgrounds. The custom layout runs an invisible 51 px Waybar on the left to reserve space for the Quickshell rail; it does not draw any icons. Inspired by [Caelestia Shell](https://github.com/caelestia-dots/shell); this repository contains its own QML implementation.
 
+The left rail has a straight outer edge and concave inner corners that follow Hyprland's outer gaps and window rounding, fitting around the left corners of tiled windows.
+
 Click the media card in Dashboard, or the cover and track details in Media, to focus the player window. Playback buttons retain their own actions. The panel asks the MPRIS player to raise itself and uses Hyprland's window list when the player does not do so. If several windows of the same app are open and the playing one cannot be identified, it leaves the current window focused.
 
 ## Requirements

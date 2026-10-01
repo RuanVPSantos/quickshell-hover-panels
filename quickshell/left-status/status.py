@@ -112,6 +112,25 @@ def power_profile():
     return match.group(1) if match else ""
 
 
+def rail_geometry():
+    geometry = {"gap_top": 4, "gap_bottom": 4, "gap_left": 4, "rounding": 10}
+    try:
+        gaps = json.loads(run("hyprctl", "-j", "getoption", "general:gaps_out"))
+        values = [max(0, int(value)) for value in gaps.get("custom", "").split()]
+        if len(values) == 1:
+            values *= 4
+        if len(values) == 4:
+            geometry.update(gap_top=values[0], gap_bottom=values[2], gap_left=values[3])
+    except (ValueError, TypeError, AttributeError):
+        pass
+    try:
+        rounding = json.loads(run("hyprctl", "-j", "getoption", "decoration:rounding"))
+        geometry["rounding"] = max(0, int(rounding["int"]))
+    except (ValueError, TypeError, KeyError):
+        pass
+    return geometry
+
+
 def main():
     layout_state = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "quickshell-hover-panels/layout"
     custom = read(layout_state) == "quickshell"
@@ -130,6 +149,7 @@ def main():
     data = {
         "enabled": True,
         "layout": "custom" if custom else "legacy",
+        "rail_geometry": rail_geometry() if custom else None,
         "battery": battery(),
         "power_profile": power_profile(),
         "network": network(),
