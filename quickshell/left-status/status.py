@@ -107,6 +107,14 @@ def brightness():
         return 0
 
 
+def extra_dim():
+    try:
+        value = float(run("hyprctl", "hyprsunset", "gamma"))
+        return max(20, min(100, round(value)))
+    except ValueError:
+        return 100
+
+
 def power_profile():
     match = re.search(r"Current active profile:\s*(\S+)", run("tuned-adm", "active"))
     return match.group(1) if match else ""
@@ -157,6 +165,7 @@ def main():
         "output": audio("@DEFAULT_AUDIO_SINK@"),
         "input": audio("@DEFAULT_AUDIO_SOURCE@"),
         "brightness": brightness(),
+        "extra_dim": extra_dim(),
         "nightlight": nightlight.get("class") == "on",
         "dnd": (read(layout_state.parent / "dnd") == "on") if custom
                else run("swaync-client", "-D", "-sw").lower() == "true",

@@ -438,7 +438,7 @@ ShellRoot {
             }
             return state + (state === "Full" ? "" : " · time unavailable");
         }
-        case "brightness": return "Adjust the laptop display.";
+        case "brightness": return "Backlight · extra dim below the display minimum.";
         case "microphone": return "Control your microphone input.";
         case "volume": return "Control speaker output.";
         case "nightlight": return "Reduce blue light from the display.";
@@ -456,10 +456,11 @@ ShellRoot {
     }
 
     function stageLevel(name, requested) {
-        if (name !== "brightness" && name !== "volume" && name !== "microphone") return;
-        const value = Math.round(Math.max(name === "brightness" ? 5 : 0, Math.min(100, requested)));
+        if (name !== "brightness" && name !== "extra-dim" && name !== "volume" && name !== "microphone") return;
+        const value = Math.round(Math.max(name === "brightness" ? 1 : name === "extra-dim" ? 20 : 0, Math.min(100, requested)));
         const next = Object.assign({}, status);
         if (name === "brightness") next.brightness = value;
+        else if (name === "extra-dim") next.extra_dim = value;
         else {
             const key = name === "volume" ? "output" : "input";
             next[key] = Object.assign({}, field(key), { percent: value, muted: false });
@@ -477,6 +478,7 @@ ShellRoot {
         for (const name of Object.keys(pending)) {
             const value = pending[name];
             if (name === "brightness") Quickshell.execDetached(["brightnessctl", "set", value + "%"]);
+            else if (name === "extra-dim") Quickshell.execDetached(["python3", configHome + "/quickshell/left-status/extra_dim.py", String(value)]);
             else {
                 const target = name === "volume" ? "@DEFAULT_AUDIO_SINK@" : "@DEFAULT_AUDIO_SOURCE@";
                 Quickshell.execDetached(["wpctl", "set-volume", target, (value / 100).toFixed(2)]);
@@ -499,7 +501,7 @@ ShellRoot {
         case "bluetooth": return [{ label: "Devices", id: "bluetooth-settings" }, { label: field(name).powered ? "Turn off" : "Turn on", id: "bluetooth-power" }];
         case "battery": return [{ label: "Saver", id: "profile-saver" }, { label: "Balanced", id: "profile-balanced" },
                                 { label: "Desktop", id: "profile-desktop" }, { label: "Power save", id: "profile-powersave" }];
-        case "brightness": return [{ label: "−10%", id: "brightness-down" }, { label: "+10%", id: "brightness-up" }];
+        case "brightness": return [{ label: "−10%", id: "brightness-down" }, { label: "+10%", id: "brightness-up" }, { label: "Reset dim", id: "extra-dim-reset" }];
         case "microphone": return [{ label: field("input").muted ? "Unmute" : "Mute", id: "microphone-mute" }, { label: "Mixer", id: "mixer" }];
         case "volume": return [{ label: "−5%", id: "volume-down" }, { label: field("output").muted ? "Unmute" : "Mute", id: "volume-mute" }, { label: "+5%", id: "volume-up" }];
         case "nightlight": return [{ label: status.nightlight ? "Turn off" : "Turn on", id: "nightlight-toggle" }];
@@ -508,6 +510,11 @@ ShellRoot {
     }
 
     function runAction(action, screen) {
+        if (action === "extra-dim-reset") {
+            stageLevel("extra-dim", 100);
+            flushLevels();
+            return;
+        }
         if (action === "wifi-picker") {
             current = "";
             wifiScreenName = screen.name;
@@ -1376,7 +1383,7 @@ ShellRoot {
             screen: modelData
             visible: shell.status.enabled && shell.railVisibleFor(modelData.name) && shell.current !== "" && !(Hyprland.monitorFor(modelData)?.activeWorkspace?.hasFullscreen ?? false)
             implicitWidth: 292
-            implicitHeight: shell.current === "battery" ? 230 : 204
+            implicitHeight: shell.current === "brightness" ? 294 : shell.current === "battery" ? 230 : 204
             anchors.left: true
             anchors.bottom: true
             margins.left: 46 + shell.railInset
@@ -1454,7 +1461,7 @@ ShellRoot {
                     width: parent.width - 36
                     height: 27
                     visible: shell.current === "brightness" || shell.current === "volume" || shell.current === "microphone"
-                    from: shell.current === "brightness" ? 5 : 0
+                    from: shell.current === "brightness" ? 1 : 0
                     to: 100
                     value: shell.percentFor(shell.current)
                     onMoved: shell.stageLevel(shell.current, value)
@@ -1484,8 +1491,61 @@ ShellRoot {
                         border.width: 1
                     }
                 }
+                Text {
+                    x: 18; y: 143
+                    width: parent.width - 36
+                    visible: shell.current === "brightness"
+                    text: "Extra dim · " + (shell.status.extra_dim ?? 100) + "%"
+                    color: "#F4F4F6"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                }
+                Controls.Slider {
+                    id: extraDimSlider
+                    x: 18; y: 167
+                    width: parent.width - 36
+                    height: 27
+                    visible: shell.current === "brightness"
+                    from: 20
+                    to: 100
+                    stepSize: 1
+                    value: shell.status.extra_dim ?? 100
+                    Accessible.name: "Extra dim intensity"
+                    onMoved: shell.stageLevel("extra-dim", value)
+                    onPressedChanged: if (!pressed) shell.flushLevels()
+                    background: Rectangle {
+                        y: (extraDimSlider.height - height) / 2
+                        width: extraDimSlider.width
+                        height: 6
+                        radius: 3
+                        color: "#5b4f5d"
+                        Rectangle {
+                            width: parent.width * extraDimSlider.visualPosition
+                            height: parent.height
+                            radius: 3
+                            color: "#f2eaf1"
+                        }
+                    }
+                    handle: Rectangle {
+                        x: extraDimSlider.leftPadding + extraDimSlider.visualPosition * (extraDimSlider.availableWidth - width)
+                        y: (extraDimSlider.height - height) / 2
+                        width: 16; height: 16; radius: 8
+                        color: extraDimSlider.pressed ? "#ffffff" : "#f2eaf1"
+                        border.color: "#ab91a8"
+                        border.width: 1
+                    }
+                }
+                Text {
+                    x: 18; y: 201
+                    visible: shell.current === "brightness"
+                    text: "Lower = darker · 100% = no filter"
+                    color: "#c7b8c8"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                }
                 Grid {
-                    x: 18; y: shell.current === "battery" ? 131 : 139
+                    x: 18; y: shell.current === "brightness" ? 233 : shell.current === "battery" ? 131 : 139
                     columns: shell.current === "battery" ? 2 : shell.actionsFor(shell.current).length
                     spacing: 7
                     Repeater {

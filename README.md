@@ -63,6 +63,8 @@ The battery popout offers Saver (`balanced-battery`), Balanced, Desktop, and Pow
 
 The Left Status buttons hide on a fullscreen workspace and follow the Waybar visibility shortcut (`Super+Ctrl+Alt+B`). In the Quickshell layout, hiding the bar enables automatic reveal: hover the extreme left edge to open it, then move away from the rail and its popouts to hide it again. The revealed rail overlays windows without reserving space. Press the shortcut again to keep it visible. The installer updates the existing Hyprland shortcut and keeps its visibility state in `~/.local/state/quickshell-hover-panels/left-status-visible`.
 
+The brightness popout has separate backlight and **Extra dim** sliders. Extra dim uses Hyprsunset to darken the image below the panel’s backlight minimum, from 20% to 100% (no filter). **Reset dim** returns it to 100%. It reads the current value from Hyprsunset and preserves the current color temperature when adjusting it. If Hyprsunset is stopped, adjusting Extra dim starts it with neutral colors. This is a session setting; restarting Hyprsunset, including with the existing night light toggle, can reset it.
+
 The popouts use the local `nmcli`, BlueZ, `brightnessctl`, `wpctl`, `tuned-adm` and the existing Hyprsunset script. Their buttons open settings or change the corresponding setting; hovering alone never changes it.
 
 ## Optional animation
